@@ -1,0 +1,160 @@
+
+-   rts
+updateEnvelope:
+    jsr getEnvelopeX            ; get envelope var offset for this stream
+    bcs -                       ; if stream doesn't have envelope, return
+    stx tmpvar
+    
+    ldx curStream               ; if note off, return
+    lda nesmus.streamFlags, x 
+    and #3
+    beq -
+    
+    ldx tmpvar
+    
+    ; if note released, jump to release offset
+    cmp #3
+    bne +
+    ldy nesmus.envId, x
+    lda nesmus.envReleaseOffs, y
+    sta nesmus.envOffs, x
+    dec nesmus.streamFlags, x
+    
++   lda nesmus_envId, x ; use envelope id (for drums, this equals the current note) as pointer-table index
+    asl
+    tay
+    cpx #2
+    beq updateNoiseEnvelope ; branch for noise channel
+    lda nesmus.envelopeTable, y
+    sta dataPtr
+    lda nesmus.envelopeTable+1, y
+    sta dataPtr+1
+    ldy nesmus.envOffs, x
+nextEnvCmd:
+    lda (dataPtr), y    ; get next command byte
+    cmp #$FF            ; $FF = hold envelope
+    bne +
+    rts
++   iny
+    cmp #$FE            ; $FE = jump to offset
+    bne +
+    lda (dataPtr), y
+    tay
+    jmp nextEnvCmd
++   sta tmpvar+1        ; save command
+    ora #$30            ; save envelope value
+    sta nesmus.envValue, x
+    lda tmpvar+1        ; d4 set -> read length byte
+    and #$10
+    bne +
+    lda (dataPtr), y
+    iny
+    sta nesmus.envTimer, x
++   tya
+    sta nesmus.envOffs, x   ; save envelope offset
+    rts
+    
+updateNoiseEnvelope:
+    lda nesmus.drumTable.w, y
+    sta dataPtr
+    lda nesmus.drumTable+1.w,y
+    sta dataPtr+1
+    ldy nesmus.envOffs+2
+nextDrumEnv:
+    dec nesmus.drumBytes    ; more bytes in this chunk?
+    bne ++                  ; if yes, skip
+    lda (dataPtr), y        ; else read chunk header byte
+    bne +                   ; zero -> done
+    rts
++   iny                     ; low nybble -> chunk length
+    pha
+    and #$0F
+    sta nesmus.drumBytes
+    pla                     ; high nybble -> duration for this chunk in frames
+    lsr
+    lsr
+    lsr
+    lsr
+    sta nesmus.drumLength
+++  lda nesmus.drumLength   ; save length and timer
+    sta nesmus.envTimer+2
+    lda (dataPtr), y        ; get next envelope value
+    iny
+    sta nesmus.envValue+2
+    sty nesmus.envOffs+2.w
+    rts
+    
+updatePitchbend:
+    lda nesmus.streamFlags, x  
+    sta tmpvar
+    and #PFX_ENABLE
+    bne +
+-   rts
++   jsr getPitchX
+    ; decrement pitchbend timer
+    dec nesmus.pitchbendTimer, x
+    bne -
+    lda nesmus.pitchbendSpeed, x
+    sta nesmus.pitchbendTimer, x
+    ; if vibrato mode, handle things slightly differently
+    lda tmpvar
+    and #PFX_MASK
+    cmp #PFX_PORTA_DOWN
+    beq pitchbendDown
+    cmp #PFX_PORTA_UP
+    beq pitchbendUp
+    cmp #PFX_VIBRATO
+    beq updateVibrato
+    rts
+    
+pitchbendDown:
+    lda nesmus.pitchbendDelta, x
+    jmp addPeriod
+    
+; this creates a 4-phase vibrato cycle
+updateVibrato:
+    lda tmpvar
+    eor #PFX_VIBRATO_TOG
+    sta tmpvar
+    and #PFX_VIBRATO_TOG
+    beq +
+    lda tmpvar
+    eor #PFX_VIBRATO_DIR
+    sta tmpvar
+    and #PFX_VIBRATO_DIR
++   bne pitchbendDown
+    
+pitchbendUp:
+    lda nesmus.pitchbendDelta, x
+    jmp subtractPeriod
+    
+subtractPeriod:
+    sta tmpvar+1
+    sec
+    lda nesmus.periodL, x
+    sbc tmpvar+1
+    bcs +
+    sta tmpvar+1
+    lda nesmus.periodH, x
+    beq +
+    sbc #0
+    sta nesmus.periodH, x
+    lda tmpvar+1
++   sta nesmus.periodL, x
+    rts
+    
+addPeriod:
+    clc
+    adc nesmus.periodL, x
+    bcc ++
+    lda nesmus.periodH, x
+    adc #0
+    cmp #8
+    bcc +
+    lda #$07
++   sta nesmus.periodH, x
+    lda #$FF 
+++  sta nesmus.periodL, x
+    rts
+    
+    

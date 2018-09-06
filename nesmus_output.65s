@@ -1,0 +1,161 @@
+
+channelBits:    .db 1, 2, 4, 8, 1, 2, 4, 8
+
+outputPitch:
+    ldx curChannel  ; if not noise channel, branch to handle 11-bit period
+    cpx #3
+    bcc ++
+    ldx curStream   ; we have noise channel. check whether it's music or sfx
+    cpx #7          ; if music noise (drums), branch
+    bne +           
+    lda nesmus.curNote+7    ; sfx: use current note modulo 16 as noise period
+    and #$0F
+    sta $400E
+    jmp +++
++   lda nesmus.envValue+2   ; drums: use upper nybble from drum envelope as noise period
+    lsr
+    lsr
+    lsr
+    lsr
+    sta $400E
+    jmp +++
+    
+++  ldx curStream   ; non-noise channels. use stored period value
+    cpx #4          ; get offset for pitch vars
+    bcc +
+    dex
+    
++   lda #$7F                    ; sign extend detune from 8 to 16 bits
+    cmp nesmus.noteDetune, x    ; (carry is set if <= $7F)
+    adc #$80
+    sta tmpvar
+    
+    ldy outputOffs
+    lda nesmus.periodL, x   ; write low period
+    clc
+    adc nesmus.noteDetune, x
+    sta $4002, y
+    lda nesmus.periodH, x   ; get high period
+    adc tmpvar
+    and #7
+    ldy curChannel          ; if triangle channel, continue
+    cpy #2
+    beq +
+    cmp nesmus.prevPulsePeriodH, y  ; for pulse channels, only write high period if different from current value
+    beq +++
+    sta nesmus.prevPulsePeriodH, y  
++   ldy outputOffs  ; write the high period
+    ora #$80        ; (set a length counter bit)
+    sta $4003, y
++++ ldx curStream
+    rts
+    
+muteChannel:
+    cpy #8
+    beq muteTriangle
+    lda #$30
+    sta $4000, y
+    rts
+muteTriangle:
+    lda #0
+    sta $4008
+    sta $400B
+    rts
+
+outputStream:
+; check if there is already output on this channel. skip this one if yes.
+    ldx curStream
+    lda channelBits.w, x
+    and outputMask
+    beq +
+    rts
+; if stream is enabled, go ahead. otherwise, for music streams (0-3) mute the channel, for sfx streams just skip
++   ldy outputOffs
+    lda nesmus.streamFlags, x
+    bmi +
+    cpx #4
+    bcc muteChannel
+    rts
+; set flag for this channel in output mask
++   lda channelBits.w, x
+    ora outputMask
+    sta outputMask
+; branch for triangle channel.
+    cpy #8
+    beq outputTriangle
+    bcs outputNoise
+; output pulse channels    
+    jsr outputVolume
+    jsr outputSweep
+    jmp outputPitch
+    
+outputTriangle:
+; mute channel if note off or stream volume == 0 or note volume == 0
+; play sound otherwise
+    lda nesmus.streamVolume, x
+    beq muteTriangle
+    lda nesmus.noteVolume, x
+    beq muteTriangle
+    lda nesmus.streamFlags, x
+    and #3
+    beq muteTriangle
+    jmp outputPitch
+    
+outputNoise:
+    jsr outputVolume
+    jmp outputPitch
+    
+outputSweep:
+    cpx #4
+    bcc +
+    dex
+    dex
++   lda pulseSweep, x
+    sta $4001, y
+    rts
+    
+getEnvValueOrMaxVol:
+    cpx #4
+    bcs ++
+    cpx #3
+    bne +
+    dex
++   lda nesmus.envValue, x
+    rts
+++  lda #$3F
+    cpx #6
+    bcs +
+    ora nesmus.sfxDuty-4, x
++   ldx curStream
+    rts
+    
+-   jmp muteChannel
+outputVolume:
+    jsr getEnvValueOrMaxVol ; get envelope value or sfx volume value
+    sta tmpvar
+    and #$0F
+    sta tmpvar+1
+    beq -
+    lda nesmus.streamVolume, x
+    beq -
+    lda nesmus.noteVolume, x
+    beq -
+    clc
+    adc nesmus.streamVolume, x
+    clc
+    adc tmpvar+1
+    sec
+    sbc #30
+    cmp #1
+    bpl +
+    lda #1
++   sta tmpvar+1
+    lda tmpvar
+    and #$F0
+    ora tmpvar+1
+    sta $4000, y
+    rts
+    
+; volume = envValue - (15 - streamVol) - (15 - noteVol)
+;        = envValue + streamVol + noteVol - 30
+    

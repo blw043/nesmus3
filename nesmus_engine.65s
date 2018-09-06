@@ -1,0 +1,145 @@
+
+; loads X with the index of current stream's envelope vars.
+; carry clear if stream has envelope, set otherwise
+envVarsTable:   .db %000, %0010, %001, %100
+
+getEnvelopeX:
+    cpx #4      ; if not music stream, return
+    bcs +
+    pha
+    lda envVarsTable.w, x
+    lsr
+    tax
+    pla
++   rts
+    
+; loads X with the index of current stream's pitch vars.
+pitchVarsTable:
+    .db %0000, %0010, %0100, %0001, %0110, %1000, %1010
+getPitchX:
+    cpx #7
+    bcs +
+    pha
+    lda pitchVarsTable.w, x
+    lsr
+    tax
+    pla
++   rts
+    
+sweepVarsTable:
+    .db %0000, %0010, %0001, %0001, %0100, %0110
+getSweepX:
+    cpx #6
+    bcs +
+    pha
+    lda sweepVarsTable.w, x
+    lsr
+    tax
+    pla
++   rts
+    
+; saves current stream, also computes channel and output offset
+saveCurStream:
+    stx curStream
+    txa
+    and #3
+    sta curChannel
+    asl
+    asl
+    sta outputOffs
+    rts
+    
+; ====================
+;  start of public API
+; ====================
+
+; Initializes a stream. (X = stream number)
+stopStream:
+    stx curStream               ; clear everything
+    lda #0
+    sta nesmus.streamFlags, x
+    lda #1
+    sta nesmus.streamTimer, x
+    sta nesmus.streamTimer, x
+    sta nesmus.noteLength, x
+    sta nesmus.noteTimer, x
+    lda #0
+setEnvelope:
+    jsr getEnvelopeX
+    bcs +
+    sta nesmus.envId, x
+restartEnvelope:
+    lda #0
+    sta nesmus.envOffs, x
+    lda #1
+    sta nesmus.envTimer, x
+    ldx curStream
+    cpx #3
+    bne +
+    sta nesmus.drumBytes
++   rts
+
+; starts a stream.
+startStream:
+    lda #$80 ; set enable bit
+    sta nesmus.streamFlags, x
+    rts
+    
+initEngine:
+; initialize PSG registers
+    ldx #$03   
+-   lda initialOutput.w, x
+    sta $4000, x
+    sta $4004, x
+    sta $4008, x
+    sta $400C, x
+    dex
+    bpl -
+    lda #$0F
+    sta $4015
+; initialize streams
+    ldx #7
+-   stx curStream
+    jsr stopStream
+    dex
+    bpl -
+    rts
+initialOutput:
+    .db $30, $0F, $00, $80
+    
+
+updateEngine:
+    ldx #7
+    lda #0
+    sta outputMask
+-   lda nesmus.streamFlags, x ; skip stream if disabled
+    bpl ++
+    jsr saveCurStream  ; get channel & output offset
+    jsr updateNote
+    lda nesmus.streamFlags, x ; note state may have changed. reload it
+    bmi +                     ; if still enabled, continue
+    jsr stopStream            ; else stop stream and jump to output
+    jmp ++                    
++   and #%0011                ; if note off, continue
+    beq ++
+    jsr updateEffects         ; update envelope and pitch effects, if applicable
+    ldx curStream
+++  jsr outputStream
+    dex
+    bpl -
+    
+; effect mask determines which effects this stream supports.
+;   d0: 1 = envelope supported, 0 = not supported
+;   d1: 1 = pitchbend supported, 0 = not supported
+streamEffectMasks:  .db %11, %11, %10, %01, %10, %10, %10, %00
+updateEffects:
+    ldx curStream
+    lda streamEffectMasks, x
+    lsr
+    sta effectMask
+    bcc +
+    jsr updateEnvelope
++   lsr effectMask
+    bcc +
+    jmp updatePitchbend
++   rts

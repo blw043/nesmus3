@@ -1,0 +1,21 @@
+.include "nesmus_vars.inc"
+
+
+.macro jump_table
+    sty \2
+    asl
+    tay
+    lda \1.w, y
+    pha
+    lda \1+1.w, y
+    pha
+    ldy \2
+    rts
+.endm
+
+.section "nesmus" namespace "nesmus" free
+    .include "nesmus_engine.65s"
+    .include "nesmus_note.65s"
+    .include "nesmus_effects.65s"
+    .include "nesmus_output.65s"
+.ends

@@ -1,0 +1,330 @@
+getDataWord:
+    lda (dataPtr), y
+    sta tmpvar
+    iny
+    bne getDataByte
+    inc dataPtr+1
+getDataByte:
+    lda (dataPtr), y
+incDataPtr:
+    iny
+    bne +
+    inc dataPtr+1
++   rts
+
+getLengthParam:
+    and #$0F
+    beq getDataByte
+    rts
+    
+getIndexParam:
+    and #$0F
+    cmp #$0F
+    beq getDataByte
+    rts
+
+updateNote:
+    dec nesmus.streamTimer, x
+    bne +
+    lda nesmus.streamTempo, x
+    sta nesmus.streamTimer, x
+    dec nesmus.noteTimer, x
+    beq ++
++   rts
+++  lda nesmus.noteLength, x
+    sta nesmus.noteTimer, x
+    lda #0
+    sta dataPtr
+    ldy nesmus.notePtrL, x
+    lda nesmus.notePtrH, x
+    sta dataPtr+1
+nextNote:
+    jsr getDataByte
+    sta tmpvar
+    cmp #$F0
+    bcc +
+    jump_table notes_F0, tmpvar+1
++   lsr
+    lsr
+    lsr
+    lsr
+    jump_table notes_00_EF, tmpvar+1
+    
+notes_F0:
+    .dw callSub             -1
+    .dw returnSub           -1
+    .dw beginLoop           -1
+    .dw endLoop             -1
+    .dw cutDelay            -1
+    .dw releaseDelay        -1
+    .dw holdDelay           -1
+    .dw noteJump            -1
+    .dw pitchbendOff        -1
+    .dw pitchbendVibrato    -1
+    .dw pitchbendPortaDown  -1
+    .dw pitchbendPortaUp    -1
+    .dw pitchbendSetParams  -1
+    .dw setSweep            -1  ; set hardware sweep registers for pulse
+    .dw setDetune           -1
+    .dw stopStream          -1
+notes_00_EF:
+    .dw playNote            -1  ; play note or drum
+    .dw playNote            -1
+    .dw playNote            -1
+    .dw playNote            -1
+    .dw playNote            -1
+    .dw cutRest             -1
+    .dw releaseRest         -1
+    .dw setNoteTimer        -1
+    .dw setNoteLength       -1
+    .dw setNoteLength       -1
+    .dw setNoteVolume       -1
+    .dw note_setEnvelope    -1  ; set envelope (or duty cycle, on sfx pulse)
+    .dw setTempo            -1
+    .dw setTempo            -1
+    .dw nextNote            -1
+    
+playNote:
+    ; save value as note number
+    lda tmpvar
+    sta nesmus.curNote, x
+    ; for noise music (drum) channel, use note number as envelope
+    cpx #3      
+    bne +
+    lda tmpvar
+    sta nesmus.envId+2
+    jmp ++
+    ; load X with offset for this stream's pitch variables
++   jsr getPitchX
+    bcs ++
+    sty tmpvar+1 ; save y
+    ; lookup note period from table
+    ldy tmpvar
+    lda periodTableL.w, y
+    sta nesmus.periodL, x
+    lda periodTableH.w, y
+    sta nesmus.periodH, x
+    ldy tmpvar+1 ;restore y
+    ldx curStream
+    ; set note state
+++  lda nesmus.streamFlags, x
+    and #$FC
+    ora #$02
+    sta nesmus.streamFlags, x
+    jsr getEnvelopeX
+    jsr restartEnvelope
+    ldx curStream
+    jmp commitNotePtr
+    
+cutRest:
+    lda nesmus.streamFlags, x
+    and #$FC
+    sta nesmus.streamFlags, x
+    jmp setNoteTimer
+    
+releaseRest:
+    lda nesmus.streamFlags, x
+    ora #$03
+    sta nesmus.streamFlags, x
+    jmp setNoteTimer
+    
+setNoteTimer:
+    lda tmpvar
+    jsr getLengthParam
+    sta nesmus.noteTimer, x
+commitNotePtr:
+    tya
+    sta nesmus.notePtrL, x
+    lda dataPtr+1
+    sta nesmus.notePtrH, x
+    rts
+
+setNoteLength:
+    cmp #$90
+    php
+    lda tmpvar
+    jsr getLengthParam
+    plp
+    sta nesmus.noteTimer, x
+    bcs +
+    sta nesmus.noteLength, x
+    jmp nextNote
+
+setNoteVolume:
+    lda tmpvar
+    and #$0F
+    sta nesmus.noteVolume, x
+    jmp nextNote
+    
+note_setEnvelope:
+    lda tmpvar
+    jsr getIndexParam
+    sta tmpvar
+    lda streamEffectMasks.w, x
+    lsr
+    bcs +
+    txa
+    and #$02
+    bne ++
+    tax
+    lda tmpvar
+    ror
+    ror
+    ror
+    and #$C0
+    sta nesmus.sfxDuty, x
+    jmp ++
++   jsr setEnvelope
+++  ldx curStream
+    jmp nextNote
+
+setTempo:
+    lda tmpvar
+    and #$1F
+    sta nesmus.streamTempo, x
+    jmp nextNote
+    
+callSub:
+    jsr getDataWord
+    sta tmpvar+1
+    tya
+    sta nesmus.noteRetPtrL, x
+    lda dataPtr+1
+    sta nesmus.noteRetPtrH, x
+    ldy tmpvar
+    lda tmpvar+1
+    jmp nextNote
+    
+returnSub:
+    ldy nesmus.noteRetPtrL, x
+    lda nesmus.noteRetPtrH, x
+    sta dataPtr+1
+    jmp nextNote
+    
+beginLoop:
+    jsr getDataByte
+    sta nesmus.noteLoopCount, x
+    tya
+    sta nesmus.noteLoopPtrL, x
+    lda dataPtr+1
+    sta nesmus.noteLoopPtrH, x
+    jmp nextNote
+    
+endLoop:
+    dec nesmus.noteLoopCount, x
+    bne +
+    ldy nesmus.noteLoopPtrL, x
+    lda nesmus.noteLoopPtrH, x
+    sta dataPtr+1
++   jmp nextNote
+    
+cutDelay:
+    lda nesmus.streamFlags, x
+    and #$FC
+    sta nesmus.streamFlags, x
+    bne holdDelay  ; should be nonzero if stream is enabled
+releaseDelay:
+    lda nesmus.streamFlags, x
+    ora #$03
+    sta nesmus.streamFlags, x
+holdDelay:
+    jsr getDataByte    
+    sta nesmus.streamTimer, x
+    lda #1
+    sta nesmus.noteLength, x
+    jmp commitNotePtr
+    
+pitchbendOff:
+    lda nesmus.streamFlags, x
+    and #%10000011
+    sta nesmus.streamFlags, x
+    jmp nextNote
+    
+pitchbendVibrato:
+    lda nesmus.streamFlags, x
+    and #%10000011
+    ora #PFX_VIBRATO
+    sta nesmus.streamFlags, x
+    ldx curStream
+    jmp nextNote
+    
+pitchbendPortaUp:
+    lda nesmus.streamFlags, x
+    and #%10000011
+    ora #PFX_PORTA_UP
+    sta nesmus.streamFlags, x
+    jmp nextNote
+    
+pitchbendPortaDown:
+    lda nesmus.streamFlags, x
+    and #%10000011
+    ora #PFX_PORTA_DOWN
+    sta nesmus.streamFlags, x
+    jmp nextNote
+    
+pitchbendSetParams:
+    jsr getDataByte
+    jsr getPitchX
+    bcs +
+    sta tmpvar
+    and #$0F
+    sta nesmus.pitchbendDelta, x
+    lda tmpvar
+    lsr
+    lsr
+    lsr
+    lsr
+    sta nesmus.pitchbendSpeed, x
++   ldx curStream
+    jmp nextNote
+    
+setSweep:
+    jsr getDataByte
+    jsr getSweepX
+    bcs +
+    sta nesmus.pulseSweep, x
++   ldx curStream
+    jmp nextNote
+    
+setDetune:
+    jsr getDataByte
+    jsr getPitchX
+    bcs +
+    sta nesmus.noteDetune, x
++   ldx curStream
+    jmp nextNote
+    
+endStream:
+    lda #0
+    sta nesmus.streamFlags, x
+    rts
+    
+ ; Note period tables:
+ ;        A  A# B  C  C# D  D# E  F  F# G  G#
+ ;           Bb       Db    Eb       Gb    Ab
+ ; Oct 0: 00 01 02 03 04 05 06 07 08 09 0a 0b
+ ; Oct 1: 0c 0d 0e 0f 10 11 12 13 14 15 16 17
+ ; Oct 2: 18 19 1a 1b 1c 1d 1e 1f 20 21 22 23
+ ; Oct 3: 24 25 26 27 28 29 2a 2b 2c 2d 2e 2f
+ ; Oct 4: 30 31 32 33 34 35 36 37 38 39 3a 3b
+ ; Oct 5: 3c 3d 3e 3f 40 41 42 43 44 45 46 47
+ ; Oct 6: 48 49 4a 4b 4c 4d 4e 4f
+    
+periodTableL:
+    .db $f1, $7f, $13, $ad, $4d, $f3, $9d, $4c, $00, $b8, $74, $34   ;0 - $00
+    .db $f8, $bf, $89, $56, $26, $f9, $ce, $a6, $80, $5c, $3a, $1a   ;1 - $0C
+    .db $fb, $df, $c4, $ab, $93, $7c, $67, $52, $3f, $2d, $1c, $0c   ;2 - $18
+    .db $fd, $ef, $e1, $d5, $c9, $bd, $b3, $a9, $9f, $96, $8e, $86   ;3 - $24
+    .db $7e, $77, $70, $6a, $64, $5e, $59, $54, $4f, $4b, $46, $42   ;4 - $30
+    .db $3f, $3b, $38, $34, $31, $2f, $2c, $29, $27, $25, $23, $21   ;5 - $3C
+    .db $1f, $1d, $1b, $1a, $18, $17, $15, $14                       ;6 - $48
+    
+periodTableH:
+    .db $07, $07, $07, $06, $06, $05, $05, $05, $05, $04, $04, $04  
+    .db $03, $03, $03, $03, $03, $02, $02, $02, $02, $02, $02, $02
+    .db $01, $01, $01, $01, $01, $01, $01, $01, $01, $01, $01, $01
+    .db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    .db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    .db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    .db $00, $00, $00, $00, $00, $00, $00, $00
+    
