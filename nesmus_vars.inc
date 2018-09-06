@@ -10,7 +10,6 @@
 .define dataPtr     $FE
 
 .define nesmus.musicPtr     $7F0
-.define nesmus.streamVolume $7F8
 
 .define NOTE_STATE      %00000011
 .define NOTE_OFF        %00000000
@@ -42,6 +41,7 @@
     nesmus.streamFlags      ds 8    
     nesmus.streamTempo      ds 8
     nesmus.streamTimer      ds 8
+    nesmus.streamVolume     ds 8
     nesmus.noteLength       ds 8
     nesmus.noteTimer        ds 8
     nesmus.curNote          ds 8
