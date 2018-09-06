@@ -17,6 +17,7 @@ outputPitch:
     lsr
     lsr
     lsr
+    eor #$0F
     sta $400E
     jmp +++
     
@@ -110,7 +111,7 @@ outputSweep:
     bcc +
     dex
     dex
-+   lda pulseSweep, x
++   lda nesmus.pulseSweep, x
     sta $4001, y
     rts
     

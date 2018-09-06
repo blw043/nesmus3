@@ -1,30 +1,34 @@
-
+releaseEnvelope:                            ; get saved envelope var offset
+    ldy nesmus.envId, x                     ; use envelope id as index
+    lda nesmus.envReleaseOffsTable.w, y     ; use pulse envelope as default
+    cpx #2                                  ; override if drum envelope
+    bcc +
+    lda nesmus.drumReleaseOffsTable.w, y
++   sta nesmus.envOffs, x                   ; save new offset
+    dec nesmus.streamFlags, x               ; decrement note state
 -   rts
 updateEnvelope:
     jsr getEnvelopeX            ; get envelope var offset for this stream
     bcs -                       ; if stream doesn't have envelope, return
-    stx tmpvar
     
-    ldx curStream               ; if note off, return
+    ldx curStream               ; if note off or held, return
     lda nesmus.streamFlags, x 
     and #3
-    beq -
+    cmp #2
+    bcc -
     
-    ldx tmpvar
-    
-    ; if note released, jump to release offset
+    ; handle note release
+    ldx envX
     cmp #3
     bne +
-    ldy nesmus.envId, x
-    lda nesmus.envReleaseOffsTable.w, y
-    sta nesmus.envOffs, x
-    dec nesmus.streamFlags, x
+    jsr releaseEnvelope
+    jmp nextEnvCmd ; continue
     
-+   lda nesmus_envId, x ; use envelope id (for drums, this equals the current note) as pointer-table index
++   lda nesmus.envId, x ; use envelope id (for drums, this equals the current note) as pointer-table index
     asl
     tay
     cpx #2
-    beq updateNoiseEnvelope ; branch for noise channel
+    beq updateDrumEnvelope ; branch for noise channel
     lda nesmus.envelopeTable.w, y
     sta dataPtr
     lda nesmus.envelopeTable+1.w, y
@@ -32,19 +36,20 @@ updateEnvelope:
     ldy nesmus.envOffs, x
 nextEnvCmd:
     lda (dataPtr), y    ; get next command byte
-    cmp #$FF            ; $FF = hold envelope
-    bne +
-    rts
+    cmp #$FF            ; $FF = hold previous value
+    beq env.holdValue
 +   iny
     cmp #$FE            ; $FE = jump to offset
     bne +
     lda (dataPtr), y
     tay
     jmp nextEnvCmd
-+   sta tmpvar+1        ; save command
-    ora #$30            ; save envelope value
++   cmp #$FD
+    beq env.cutNote
+    sta tmpvar          ; save command
+    and #$CF            ; save envelope value
     sta nesmus.envValue, x
-    lda tmpvar+1        ; d4 set -> read length byte
+    lda tmpvar          ; d4 set -> read length byte
     and #$10
     bne +
     lda (dataPtr), y
@@ -52,44 +57,72 @@ nextEnvCmd:
     sta nesmus.envTimer, x
 +   tya
     sta nesmus.envOffs, x   ; save envelope offset
+    ldx curStream
     rts
     
-updateNoiseEnvelope:
-    lda nesmus.drumTable.w, y
+env.holdValue:
+    ldx curStream
+    lda nesmus.streamFlags, x
+    and #$FC
+    ora #1
+    sta nesmus.streamFlags, x
+    rts
+    
+env.cutNote:
+    ldx curStream
+    jsr cutNote
+    rts
+    
+updateDrumEnvelope:
+    lda nesmus.drumTable.w, y   ; get envelope pointer from drum table
     sta dataPtr
     lda nesmus.drumTable+1.w,y
     sta dataPtr+1
-    ldy nesmus.envOffs+2
+    ldy nesmus.drumOffs
 nextDrumEnv:
-    dec nesmus.drumBytes    ; more bytes in this chunk?
-    bne ++                  ; if yes, skip
-    lda (dataPtr), y        ; else read chunk header byte
-    bne +                   ; zero -> done
-    rts
-+   iny
-    cmp #$10                ; $10 = jump to offset
-    bne +
-    lda (dataPtr), y
-    tay
-    jmp nextDrumEnv
-+   pha                     ; low nybble -> chunk length
-    and #$0F
-    sta nesmus.drumBytes
-    pla                     ; high nybble -> duration for this chunk in frames
-    lsr
-    lsr
-    lsr
-    lsr
-    sta nesmus.drumLength
-++  lda nesmus.drumLength   ; save length and timer
-    sta nesmus.envTimer+2
+    lda nesmus.drumBytes    ; more bytes in this chunk?
+    beq drumChunkHeader     ; if not, read chunk header
+readDrumValue:
+    dec nesmus.drumBytes    ; decrement byte count
+    lda nesmus.drumLength   ; reload length
+    sta nesmus.drumTimer    
     lda (dataPtr), y        ; get next envelope value
     iny
-    sta nesmus.envValue+2
-    sty nesmus.envOffs+2.w
+    sta nesmus.drumValue
+    sty nesmus.drumOffs
     rts
+drumChunkHeader:
+    lda (dataPtr), y        ; else read chunk header byte
+    beq env.holdValue      ; zero -> we're done, hold last value
+    sta tmpvar              ; else save
+    cmp #$10                ; $00-$0F -> special commands
+    bcc +
+    lsr                     ; else: byte count in upper nybble
+    lsr
+    lsr
+    lsr
+    sta nesmus.drumBytes
+    lda tmpvar              ; frame count in lower nybble
+    and #$0F
+    sta nesmus.drumLength
+    bne readDrumValue       ; unconditional branch
++   and #3                  ; only use low 2 bits
+    jump_table drumCmds, tmpvar+1
+
+drumCmds:
+    .dw env.holdValue    -1
+    .dw env.cutNote      -1
+    .dw drum.setOffs     -1
+    .dw env.holdValue    -1
+    
+drum.setOffs:
+    iny
+    lda (dataPtr), y
+    tay
+    jmp nextDrumEnv    
     
 updatePitchbend:
+    ldx curStream
     lda nesmus.streamFlags, x  
     sta tmpvar
     and #PFX_ENABLE
@@ -134,17 +167,17 @@ pitchbendUp:
     jmp subtractPeriod
     
 subtractPeriod:
-    sta tmpvar+1
+    sta tmpvar
     sec
     lda nesmus.periodL, x
-    sbc tmpvar+1
+    sbc tmpvar
     bcs +
-    sta tmpvar+1
+    sta tmpvar
     lda nesmus.periodH, x
     beq +
     sbc #0
     sta nesmus.periodH, x
-    lda tmpvar+1
+    lda tmpvar
 +   sta nesmus.periodL, x
     rts
     

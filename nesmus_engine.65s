@@ -3,14 +3,14 @@
 ; carry clear if stream has envelope, set otherwise
 envVarsTable:   .db %000, %0010, %001, %100
 
+; 17-28 cycles
 getEnvelopeX:
     cpx #4      ; if not music stream, return
     bcs +
-    pha
     lda envVarsTable.w, x
     lsr
     tax
-    pla
+    stx envX
 +   rts
     
 ; loads X with the index of current stream's pitch vars.
@@ -19,11 +19,10 @@ pitchVarsTable:
 getPitchX:
     cpx #7
     bcs +
-    pha
     lda pitchVarsTable.w, x
     lsr
     tax
-    pla
+    stx pitchX
 +   rts
     
 sweepVarsTable:
@@ -31,11 +30,10 @@ sweepVarsTable:
 getSweepX:
     cpx #6
     bcs +
-    pha
     lda sweepVarsTable.w, x
     lsr
     tax
-    pla
+    stx sweepX
 +   rts
     
 ; saves current stream, also computes channel and output offset
@@ -55,26 +53,31 @@ saveCurStream:
 
 ; Initializes a stream. (X = stream number)
 stopStream:
-    stx curStream               ; clear everything
-    lda #0
-    sta nesmus.streamFlags, x
     lda #1
     sta nesmus.streamTimer, x
-    sta nesmus.streamTimer, x
+    sta nesmus.streamTempo, x
     sta nesmus.noteLength, x
     sta nesmus.noteTimer, x
     lda #0
+    sta nesmus.streamFlags, x
+    rts
+    
 setEnvelope:
+    pha
     jsr getEnvelopeX
+    pla
     bcs +
     sta nesmus.envId, x
+    rts
+    
 restartEnvelope:
-    lda #0
-    sta nesmus.envOffs, x
+    jsr getEnvelopeX
+    bcs +
     lda #1
     sta nesmus.envTimer, x
-    ldx curStream
-    cpx #3
+    lda #0
+    sta nesmus.envOffs, x
+    cpx #2
     bne +
     sta nesmus.drumBytes
 +   rts
@@ -82,6 +85,12 @@ restartEnvelope:
 ; starts a stream.
 startStream:
     lda #$80 ; set enable bit
+    sta nesmus.streamFlags, x
+    rts
+    
+pauseStream:
+    lda nesmus.streamFlags, x
+    and #$7F
     sta nesmus.streamFlags, x
     rts
     

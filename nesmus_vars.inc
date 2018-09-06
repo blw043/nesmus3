@@ -3,13 +3,12 @@
 .define outputOffs  $F2
 .define envX        $F3
 .define pitchX      $F4
-.define outputMask  $F5
-.define effectMask  $F6
+.define sweepX      $F5
+.define outputMask  $F6
+.define effectMask  $F7
 .define tmpvar      $F8
 .define jumpPtr     $FC
 .define dataPtr     $FE
-
-.define nesmus.musicPtr     $7F0
 
 .define NOTE_STATE      %00000011
 .define NOTE_OFF        %00000000
@@ -28,7 +27,7 @@
 .define STREAM_OFF      %00000000
 .define STREAM_ENABLED  %10000000
 
-.enum $100
+.enum $100 EXPORT
     ; the following apply to all channels
     nesmus.notePtrL         ds 8
     nesmus.notePtrH         ds 8
@@ -49,9 +48,13 @@
     
     ; the following only apply to streams 0,1,3 (music, pulse & noise channels)
     nesmus.envId            ds 2    ; Envelope (pulse) or drum (noise) id
-    nesmus.envOffs          ds 3    ; Envelope data offset
-    nesmus.envValue         ds 3    ; Envelope value
-    nesmus.envTimer         ds 3    ; Envelope timer
+    nesmus.drumId           db
+    nesmus.envOffs          ds 2    ; Envelope data offset
+    nesmus.drumOffs         db
+    nesmus.envValue         ds 2    ; Envelope value
+    nesmus.drumValue        db
+    nesmus.envTimer         ds 2    ; Envelope timer
+    nesmus.drumTimer        db
     nesmus.drumBytes        db
     nesmus.drumLength       db
     

@@ -1,0 +1,170 @@
+.rombankmap
+    bankstotal 2
+    banksize $10
+    banks 1 ; dummy bank for iNES header
+    banksize $8000
+    banks 1
+.endro
+
+.memorymap
+    defaultslot 1
+    slot 0 $0000 size $10   ; dummy slot for iNES header
+    slot 1 $8000 size $8000
+.endme
+
+.bank 0 slot 0
+; iNES header - NROM with 32k PRG and no CHR
+.db "NES", $1A, $02, $00, $00, $00
+.db 0,0,0,0,0,0,0,0
+
+.bank 1 slot 1
+.orga $8000
+
+
+.define nmicounter $10
+.enum $20
+    joypad          db
+    prevJoypad      db
+    joypadInv       db
+    prevJoypadInv   db
+.ende
+
+reset:
+    sei
+    lda #$FF
+    txs
+    inx
+    txa
+    sta nmicounter
+    jsr nesmus.initEngine
+    jsr waitForVblank
+    jsr waitForVblank
+    jsr waitForVblank
+    lda #>music0
+    ldy #<music0
+    ldx #0
+    jsr playStream
+@loop:
+    jsr waitForNMI
+    jsr fetchJoypad
+    ldx #1
+    jsr readJoypad
+    lda joypad
+    eor #$FF
+    and joypad
+    cmp #$80    ; check A button pressed
+    beq +
+    lda #>sfx0
+    ldy #<sfx0
+    ldx #4
+    jsr playStream
++   jmp @loop
+   
+waitForVblank:
+    bit $2002
+-   bit $2002
+    bpl -
+    rts
+    
+waitForNMI:
+    lda nmicounter
+    ldx #$80
+    stx $2000
+-   cmp nmicounter
+    bne -
+    rts
+    
+fetchJoypad:
+    ldy #1
+    sty $4016
+    dey
+    sty $4016
+    rts
+    
+readJoypad:
+    lda joypad, x
+    sta prevJoypad, x
+    eor #$FF
+    sta prevJoypadInv, x
+    ldy #8
+-   lda $4016, x
+    lsr
+    rol joypad, x
+    dey
+    bne -
+    lda joypad, x
+    eor #$FF
+    sta joypadInv, x
+    rts
+    
+playStream:
+    sta nesmus.notePtrH.w, x
+    tya
+    sta nesmus.notePtrL.w, x
+    jsr nesmus.stopStream
+    jmp nesmus.startStream
+    
+nmi:
+    inc nmicounter
+    pha
+    txa
+    pha
+    tya
+    pha
+    lda #0
+    sta $2000
+    inc nmicounter
+    jsr nesmus.updateEngine
+    pla
+    tay
+    pla
+    tax
+    pla
+    rti
+
+nesmus.envelopeTable:
+    .dw envelope.0
+    .dw envelope.1
+    .dw envelope.2
+    .dw envelope.3
+    .dw envelope.4
+    .dw envelope.5
+    
+envelope.0: .db $0F,$FF
+envelope.1: .db $4F,$FF
+envelope.2: .db $8F,$FF
+envelope.3: .db $CF,$FF
+envelope.4: .db $48,$48,$46,$45,$44,$FF,$41,$FF
+envelope.5: .db $89,$86,$85,$83,$82,$81,$FF
+
+nesmus.drumTable:
+    .dw drum.0
+    .dw drum.1
+    
+sfx0:
+    .db $FE, $CA, $F1, $7C, $FF
+    
+drum.0:
+    .db $61, $1C, $59, $C7, $E5, $F4, $F3, $23, $F2, $F1, $01
+drum.1:
+    .db $41, $C8, $D7, $D6, $E2, $01
+
+nesmus.envReleaseOffsTable:  
+    .db $06
+    .db $05
+    
+nesmus.drumReleaseOffsTable:
+    .db $0A
+    .db $
+    
+music0:
+    .db $C4, $B0, $84, $24, $26, $28, $29, $98, $2B, $68
+    .db $F7
+    .dw music0
+    
+.orga $FFFA
+.section "vectors" size 6 force
+    .dw nmi
+    .dw reset
+    .dw reset
+.ends

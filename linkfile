@@ -1,0 +1,4 @@
+[objects]
+    demo.o
+[libraries]
+    bank 1 slot 1 nesmus.l

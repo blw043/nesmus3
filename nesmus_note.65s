@@ -22,7 +22,27 @@ getIndexParam:
     cmp #$0F
     beq getDataByte
     rts
+    
+releaseNote:
+    lda nesmus.streamFlags, x
+    ora #$03
+    sta nesmus.streamFlags, x
+    rts
 
+cutNote:
+    lda nesmus.streamFlags, x
+    and #$FC
+    sta nesmus.streamFlags, x
+    rts
+    
+startNote:
+    lda nesmus.streamFlags, x
+    and #$FC
+    ora #$02
+    sta nesmus.streamFlags, x
+    jsr restartEnvelope
+    rts
+    
 updateNote:
     dec nesmus.streamTimer, x
     bne +
@@ -79,7 +99,7 @@ notes_00_EF:
     .dw setNoteLength       -1
     .dw setNoteLength       -1
     .dw setNoteVolume       -1
-    .dw note_setEnvelope    -1  ; set envelope (or duty cycle, on sfx pulse)
+    .dw setEnvelopeOrSfxDuty-1  ; set envelope (or duty cycle, on sfx pulse)
     .dw setTempo            -1
     .dw setTempo            -1
     .dw nextNote            -1
@@ -88,17 +108,18 @@ playNote:
     ; save value as note number
     lda tmpvar
     sta nesmus.curNote, x
+    
     ; for noise music (drum) channel, use note number as envelope
     cpx #3      
     bne +
-    lda tmpvar
-    sta nesmus.envId+2
+    sta nesmus.drumId
     jmp ++
+    
     ; load X with offset for this stream's pitch variables
 +   jsr getPitchX
     bcs ++
-    sty tmpvar+1 ; save y
     ; lookup note period from table
+    sty tmpvar+1 ; save y
     ldy tmpvar
     lda periodTableL.w, y
     sta nesmus.periodL, x
@@ -106,28 +127,17 @@ playNote:
     sta nesmus.periodH, x
     ldy tmpvar+1 ;restore y
     ldx curStream
+    
     ; set note state
-++  lda nesmus.streamFlags, x
-    and #$FC
-    ora #$02
-    sta nesmus.streamFlags, x
-    jsr getEnvelopeX
-    jsr restartEnvelope
-    ldx curStream
+++  jsr startNote
     jmp commitNotePtr
     
 cutRest:
-    lda nesmus.streamFlags, x
-    and #$FC
-    sta nesmus.streamFlags, x
+    jsr cutNote
     jmp setNoteTimer
     
 releaseRest:
-    lda nesmus.streamFlags, x
-    ora #$03
-    sta nesmus.streamFlags, x
-    jmp setNoteTimer
-    
+    jsr releaseNote
 setNoteTimer:
     lda tmpvar
     jsr getLengthParam
@@ -154,29 +164,31 @@ setNoteVolume:
     lda tmpvar
     and #$0F
     sta nesmus.noteVolume, x
-    jmp nextNote
+-   jmp nextNote
     
-note_setEnvelope:
+setEnvelopeOrSfxDuty:
+    ldx curChannel
+    cpx #2
+    bcs -
     lda tmpvar
     jsr getIndexParam
     sta tmpvar
-    lda streamEffectMasks.w, x
-    lsr
+    cpx #4
+    bcs setSfxDuty
+    ldx curStream
+    jsr setEnvelope
+    ldx curStream
+    jmp nextNote
+setSfxDuty:
+    cpx #6
     bcs +
-    txa
-    and #$02
-    bne ++
-    tax
     lda tmpvar
     ror
     ror
     ror
     and #$C0
-    sta nesmus.sfxDuty, x
-    jmp ++
-+   jsr setEnvelope
-++  ldx curStream
-    jmp nextNote
+    sta nesmus.sfxDuty-4.w, x
++   jmp nextNote
 
 setTempo:
     lda tmpvar
@@ -191,8 +203,12 @@ callSub:
     sta nesmus.noteRetPtrL, x
     lda dataPtr+1
     sta nesmus.noteRetPtrH, x
-    ldy tmpvar
     lda tmpvar+1
+    jmp +
+noteJump:
+    jsr getDataWord
++   sta dataPtr+1
+    ldy tmpvar
     jmp nextNote
     
 returnSub:
@@ -219,14 +235,10 @@ endLoop:
 +   jmp nextNote
     
 cutDelay:
-    lda nesmus.streamFlags, x
-    and #$FC
-    sta nesmus.streamFlags, x
+    jsr cutNote
     bne holdDelay  ; should be nonzero if stream is enabled
 releaseDelay:
-    lda nesmus.streamFlags, x
-    ora #$03
-    sta nesmus.streamFlags, x
+    jsr releaseNote
 holdDelay:
     jsr getDataByte    
     sta nesmus.streamTimer, x
@@ -235,36 +247,25 @@ holdDelay:
     jmp commitNotePtr
     
 pitchbendOff:
-    lda nesmus.streamFlags, x
-    and #%10000011
-    sta nesmus.streamFlags, x
-    jmp nextNote
-    
 pitchbendVibrato:
-    lda nesmus.streamFlags, x
-    and #%10000011
-    ora #PFX_VIBRATO
-    sta nesmus.streamFlags, x
-    ldx curStream
-    jmp nextNote
-    
 pitchbendPortaUp:
+pitchbendPortaDown:
+    lda tmpvar
+    and #$03
+    sty tmpvar+1
+    tay
     lda nesmus.streamFlags, x
     and #%10000011
-    ora #PFX_PORTA_UP
+    ora pitchbendModeTable.w, x
     sta nesmus.streamFlags, x
+    ldy tmpvar+1
     jmp nextNote
     
-pitchbendPortaDown:
-    lda nesmus.streamFlags, x
-    and #%10000011
-    ora #PFX_PORTA_DOWN
-    sta nesmus.streamFlags, x
-    jmp nextNote
+pitchbendModeTable: .db PFX_OFF, PFX_VIBRATO, PFX_PORTA_UP, PFX_PORTA_DOWN
     
 pitchbendSetParams:
-    jsr getDataByte
     jsr getPitchX
+    jsr getDataByte
     bcs +
     sta tmpvar
     and #$0F
@@ -279,16 +280,16 @@ pitchbendSetParams:
     jmp nextNote
     
 setSweep:
-    jsr getDataByte
     jsr getSweepX
+    jsr getDataByte
     bcs +
     sta nesmus.pulseSweep, x
 +   ldx curStream
     jmp nextNote
     
 setDetune:
-    jsr getDataByte
     jsr getPitchX
+    jsr getDataByte
     bcs +
     sta nesmus.noteDetune, x
 +   ldx curStream

@@ -1,6 +1,5 @@
 .include "nesmus_vars.inc"
 
-
 .macro jump_table
     sty \2
     asl

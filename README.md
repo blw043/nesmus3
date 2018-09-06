@@ -45,15 +45,15 @@ The following is a complete listing of all note commands used by NESMUS3.
 Envelope data for the pulse channels consists of a string of envelope commands.
 These take the form of values to be ORed with #$30 and written to $4000 or $4004. 
 
-Special commands are: `$FF` = hold forever, `$FE xx` = jump to offset.
+Special commands are: `$FF` = hold forever, `$FE xx` = jump to offset, `$FD` = cut note.
 If bit 4 (#$10) of an envelope byte is set, the following byte specifies the number of frames to hold that value.
 
 ### Drum envelope data
-Drum envelope data is formatted differently from pulse envelope data. Drum envelopes are structured in chunks of 1 to 16 bytes. The first byte has the format `$xy` where `y` is the number of bytes following in the chunk, and `x` is the number of frames to hold each.
+Drum envelope data is formatted differently from pulse envelope data. Drum envelopes are structured in chunks of 1 to 16 bytes. The first byte has the format `$xy` where `x` is the number of bytes following in the chunk, and `y` is the number of frames to hold each.
 
 The following bytes in a chunk are like `$pv` where `p` is the noise period and `v` is the volume.
 
-Drum envelopes are terminated by a byte $00.
+Bytes $00-$02 are special commands: $00 = hold envelope value, $01 = jump to offset, $02 = cut note.
 
 ## Building
 NESMUS3 is written in 6502 assembly for the [WLA DX] (https://github.com/vhelin/wla-dx) toolchain. It can be assembled as a WLA DX library or object file and linked to a project with `wlalink`.
