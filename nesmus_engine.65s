@@ -134,7 +134,7 @@ updateEngine:
 streamEffectMasks:  .db %11, %11, %10, %01, %10, %10, %10, %00
 updateEffects:
     ldx curStream
-    lda streamEffectMasks, x
+    lda streamEffectMasks.w, x
     lsr
     sta effectMask
     bcc +

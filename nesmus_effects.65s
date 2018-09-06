@@ -16,7 +16,7 @@ updateEnvelope:
     cmp #3
     bne +
     ldy nesmus.envId, x
-    lda nesmus.envReleaseOffs, y
+    lda nesmus.envReleaseOffsTable.w, y
     sta nesmus.envOffs, x
     dec nesmus.streamFlags, x
     
@@ -25,9 +25,9 @@ updateEnvelope:
     tay
     cpx #2
     beq updateNoiseEnvelope ; branch for noise channel
-    lda nesmus.envelopeTable, y
+    lda nesmus.envelopeTable.w, y
     sta dataPtr
-    lda nesmus.envelopeTable+1, y
+    lda nesmus.envelopeTable+1.w, y
     sta dataPtr+1
     ldy nesmus.envOffs, x
 nextEnvCmd:
@@ -66,8 +66,13 @@ nextDrumEnv:
     lda (dataPtr), y        ; else read chunk header byte
     bne +                   ; zero -> done
     rts
-+   iny                     ; low nybble -> chunk length
-    pha
++   iny
+    cmp #$10                ; $10 = jump to offset
+    bne +
+    lda (dataPtr), y
+    tay
+    jmp nextDrumEnv
++   pha                     ; low nybble -> chunk length
     and #$0F
     sta nesmus.drumBytes
     pla                     ; high nybble -> duration for this chunk in frames
