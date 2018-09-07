@@ -4,9 +4,9 @@
     sty \2
     asl
     tay
-    lda \1.w, y
-    pha
     lda \1+1.w, y
+    pha
+    lda \1.w, y
     pha
     ldy \2
     rts

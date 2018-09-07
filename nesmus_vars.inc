@@ -72,6 +72,7 @@
     ; the following only apply to the pulse channels (streams 0,1,4,5)
     nesmus.pulseSweep       ds 4    ; hardware sweep registers ($4001, $4005)
     nesmus.prevPulsePeriodH ds 2    ; previous output to $4003 and $4007
+    nesmus.prevPulseSweep   ds 2    ; previous output to sweep unit
     
     nesmus.sfxDuty          ds 2
 .ende

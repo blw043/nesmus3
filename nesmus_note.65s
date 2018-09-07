@@ -41,6 +41,7 @@ startNote:
     ora #$02
     sta nesmus.streamFlags, x
     jsr restartEnvelope
+    ldx curStream
     rts
     
 updateNote:
@@ -63,12 +64,46 @@ nextNote:
     sta tmpvar
     cmp #$F0
     bcc +
+    and #$0F
     jump_table notes_F0, tmpvar+1
-+   lsr
-    lsr
-    lsr
-    lsr
-    jump_table notes_00_EF, tmpvar+1
++   cmp #$50
+    bcc playNote
+    cmp #$80
+    bcs note_80_EF
+    cmp #$70
+    bcs note_7x
+    cmp #$60
+    bcs note_6x
+note_5x:           
+    jmp cutRest      
+note_6x:
+    jmp releaseRest  
+note_7x:    
+    jmp setNoteTimer
+
+note_80_EF:
+    cmp #$B0
+    bcs note_B0_EF
+    cmp #$A0
+    bcs note_Ax
+note_80_9F:
+    jmp setNoteLength   
+note_Ax:     
+    jmp setNoteVolume      
+    
+note_B0_EF:
+    cmp #$C0
+    bcs note_C0_DF
+note_Bx: 
+    jmp setEnvelopeOrSfxDuty  ; set envelope (or duty cycle, on sfx pulse)
+note_C0_DF:
+    jmp setTempo
+    
+;+   lsr
+;    lsr
+;    lsr
+;    lsr
+;    jump_table notes_00_EF, tmpvar+1
     
 notes_F0:
     .dw callSub             -1
@@ -87,22 +122,22 @@ notes_F0:
     .dw setSweep            -1  ; set hardware sweep registers for pulse
     .dw setDetune           -1
     .dw stopStream          -1
-notes_00_EF:
-    .dw playNote            -1  ; play note or drum
-    .dw playNote            -1
-    .dw playNote            -1
-    .dw playNote            -1
-    .dw playNote            -1
-    .dw cutRest             -1
-    .dw releaseRest         -1
-    .dw setNoteTimer        -1
-    .dw setNoteLength       -1
-    .dw setNoteLength       -1
-    .dw setNoteVolume       -1
-    .dw setEnvelopeOrSfxDuty-1  ; set envelope (or duty cycle, on sfx pulse)
-    .dw setTempo            -1
-    .dw setTempo            -1
-    .dw nextNote            -1
+;notes_00_EF:
+;    .dw playNote            -1  ; play note or drum
+;    .dw playNote            -1
+;    .dw playNote            -1
+;    .dw playNote            -1
+;    .dw playNote            -1
+;    .dw cutRest             -1
+;    .dw releaseRest         -1
+;    .dw setNoteTimer        -1
+;    .dw setNoteLength       -1
+;    .dw setNoteLength       -1
+;    .dw setNoteVolume       -1
+;    .dw setEnvelopeOrSfxDuty-1  ; set envelope (or duty cycle, on sfx pulse)
+;    .dw setTempo            -1
+;    .dw setTempo            -1
+;    .dw nextNote            -1
     
 playNote:
     ; save value as note number
@@ -115,10 +150,17 @@ playNote:
     sta nesmus.drumId
     jmp ++
     
+    ; for sfx noise, just use note as is 
++   cpx #7
+    bcs commitNotePtr
+    
+    ; streams with pitch
     ; load X with offset for this stream's pitch variables
-+   jsr getPitchX
-    bcs ++
++   cpx #4
+    bcc @getPeriod
+    dex
     ; lookup note period from table
+@getPeriod
     sty tmpvar+1 ; save y
     ldy tmpvar
     lda periodTableL.w, y
@@ -161,7 +203,6 @@ setNoteLength:
     jmp nextNote
 
 setNoteVolume:
-    lda tmpvar
     and #$0F
     sta nesmus.noteVolume, x
 -   jmp nextNote
@@ -170,19 +211,17 @@ setEnvelopeOrSfxDuty:
     ldx curChannel
     cpx #2
     bcs -
+    ldx curStream
+    cpx #4
     lda tmpvar
+    bcs setSfxDuty
     jsr getIndexParam
     sta tmpvar
-    cpx #4
-    bcs setSfxDuty
     ldx curStream
     jsr setEnvelope
     ldx curStream
     jmp nextNote
-setSfxDuty:
-    cpx #6
-    bcs +
-    lda tmpvar
+setSfxDuty
     ror
     ror
     ror
@@ -191,9 +230,9 @@ setSfxDuty:
 +   jmp nextNote
 
 setTempo:
-    lda tmpvar
     and #$1F
     sta nesmus.streamTempo, x
+    sta nesmus.streamTimer, x
     jmp nextNote
     
 callSub:
@@ -250,7 +289,6 @@ pitchbendOff:
 pitchbendVibrato:
 pitchbendPortaUp:
 pitchbendPortaDown:
-    lda tmpvar
     and #$03
     sty tmpvar+1
     tay
@@ -276,16 +314,14 @@ pitchbendSetParams:
     lsr
     lsr
     sta nesmus.pitchbendSpeed, x
-+   ldx curStream
-    jmp nextNote
+    jmp +
     
 setSweep:
     jsr getSweepX
-    jsr getDataByte
     bcs +
+    jsr getDataByte
     sta nesmus.pulseSweep, x
-+   ldx curStream
-    jmp nextNote
+    jmp +
     
 setDetune:
     jsr getPitchX

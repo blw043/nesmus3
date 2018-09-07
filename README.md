@@ -56,6 +56,17 @@ The following bytes in a chunk are like `$pv` where `p` is the noise period and 
 Bytes $00-$02 are special commands: $00 = hold envelope value, $01 = jump to offset, $02 = cut note.
 
 ## Building
-NESMUS3 is written in 6502 assembly for the [WLA DX] (https://github.com/vhelin/wla-dx) toolchain. It can be assembled as a WLA DX library or object file and linked to a project with `wlalink`.
+NESMUS3 is written in 6502 assembly for the [WLA DX] (https://github.com/vhelin/wla-dx) toolchain. It is intended to be incorporated as a library into other programs.
+
+To assemble NESMUS3 as a WLA DX library file use the command
+
+    wla-6502 -l nesmus.l nesmus.65s
 
 A program using NESMUS3 must supply the labels `nesmus.envelopeTable`, `nesmus.envReleaseOffsTable`, `nesmus.drumTable`. These are used as lookup tables by the envelope system.
+
+The file `demo.65s` contains a simple host program demonstrating select features of NESMUS3.
+
+## Known current issues
+
+The hardware sweep command, $FD, is broken. Apparently 
+

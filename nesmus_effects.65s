@@ -17,12 +17,15 @@ updateEnvelope:
     cmp #2
     bcc -
     
-    ; handle note release
     ldx envX
+    dec nesmus.envTimer, x
+    bne -
+    inc nesmus.envTimer, x
+    
+    ; handle note release
     cmp #3
     bne +
     jsr releaseEnvelope
-    jmp nextEnvCmd ; continue
     
 +   lda nesmus.envId, x ; use envelope id (for drums, this equals the current note) as pointer-table index
     asl
@@ -51,7 +54,7 @@ nextEnvCmd:
     sta nesmus.envValue, x
     lda tmpvar          ; d4 set -> read length byte
     and #$10
-    bne +
+    beq +
     lda (dataPtr), y
     iny
     sta nesmus.envTimer, x
@@ -111,8 +114,8 @@ drumChunkHeader:
 
 drumCmds:
     .dw env.holdValue    -1
-    .dw env.cutNote      -1
     .dw drum.setOffs     -1
+    .dw env.cutNote      -1
     .dw env.holdValue    -1
     
 drum.setOffs:

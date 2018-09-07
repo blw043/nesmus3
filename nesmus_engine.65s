@@ -36,17 +36,6 @@ getSweepX:
     stx sweepX
 +   rts
     
-; saves current stream, also computes channel and output offset
-saveCurStream:
-    stx curStream
-    txa
-    and #3
-    sta curChannel
-    asl
-    asl
-    sta outputOffs
-    rts
-    
 ; ====================
 ;  start of public API
 ; ====================
@@ -60,6 +49,8 @@ stopStream:
     sta nesmus.noteTimer, x
     lda #0
     sta nesmus.streamFlags, x
+    lda #$0F
+    sta nesmus.noteVolume, x
     rts
     
 setEnvelope:
@@ -106,10 +97,14 @@ initEngine:
     bpl -
     lda #$0F
     sta $4015
+    sta nesmus.prevPulsePeriodH
+    sta nesmus.prevPulsePeriodH+1
 ; initialize streams
     ldx #7
 -   stx curStream
     jsr stopStream
+    lda #$0F
+    sta nesmus.streamVolume, x
     dex
     bpl -
     rts
@@ -121,22 +116,27 @@ updateEngine:
     ldx #7
     lda #0
     sta outputMask
--   lda nesmus.streamFlags, x ; skip stream if disabled
+-   stx curStream             ; get channel & output offset
+    txa
+    and #3
+    sta curChannel
+    asl
+    asl
+    sta outputOffs
+    lda nesmus.streamFlags, x ; skip stream if disabled
     bpl ++
-    jsr saveCurStream  ; get channel & output offset
     jsr updateNote
     lda nesmus.streamFlags, x ; note state may have changed. reload it
-    bmi +                     ; if still enabled, continue
-    jsr stopStream            ; else stop stream and jump to output
-    jmp ++                    
+    bpl ++                    ; if still enabled, continue
 +   and #%0011                ; if note off, continue
     beq ++
     jsr updateEffects         ; update envelope and pitch effects, if applicable
     ldx curStream
 ++  jsr outputStream
+    ldx curStream
     dex
     bpl -
-    
+    rts
 ; effect mask determines which effects this stream supports.
 ;   d0: 1 = envelope supported, 0 = not supported
 ;   d1: 1 = pitchbend supported, 0 = not supported

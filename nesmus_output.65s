@@ -10,7 +10,9 @@ outputPitch:
     bne +           
     lda nesmus.curNote+7    ; sfx: use current note modulo 16 as noise period
     and #$0F
-    sta $400E
+-   sta $400E
+    lda #$80
+    sta $400F
     jmp +++
 +   lda nesmus.envValue+2   ; drums: use upper nybble from drum envelope as noise period
     lsr
@@ -18,8 +20,7 @@ outputPitch:
     lsr
     lsr
     eor #$0F
-    sta $400E
-    jmp +++
+    jmp -
     
 ++  ldx curStream   ; non-noise channels. use stored period value
     cpx #4          ; get offset for pitch vars
@@ -48,6 +49,7 @@ outputPitch:
 +   ldy outputOffs  ; write the high period
     ora #$80        ; (set a length counter bit)
     sta $4003, y
+@done
 +++ ldx curStream
     rts
     
@@ -60,23 +62,28 @@ muteChannel:
 muteTriangle:
     lda #0
     sta $4008
+    lda #$87
     sta $400B
-    rts
+--  rts
 
 outputStream:
-; check if there is already output on this channel. skip this one if yes.
-    ldx curStream
-    lda channelBits.w, x
-    and outputMask
-    beq +
-    rts
-; if stream is enabled, go ahead. otherwise, for music streams (0-3) mute the channel, for sfx streams just skip
-+   ldy outputOffs
+    ldy outputOffs
     lda nesmus.streamFlags, x
     bmi +
-    cpx #4
+-   cpx #4
     bcc muteChannel
     rts
+; check for note off 
+    
+; check if there is already output on this channel. skip this one if yes.
++   lda channelBits.w, x
+    and outputMask
+    bne --
+    lda nesmus.streamFlags, x
+    and #3
+    beq -
+    
+; if stream is enabled, go ahead. otherwise, for music streams (0-3) mute the channel, for sfx streams just skip
 ; set flag for this channel in output mask
 +   lda channelBits.w, x
     ora outputMask
@@ -100,6 +107,8 @@ outputTriangle:
     lda nesmus.streamFlags, x
     and #3
     beq muteTriangle
+    lda #$FF
+    sta $4008
     jmp outputPitch
     
 outputNoise:
@@ -112,19 +121,23 @@ outputSweep:
     dex
     dex
 +   lda nesmus.pulseSweep, x
+    ldx curChannel
+    cmp nesmus.prevPulseSweep, x
+    beq +
+    sta nesmus.prevPulseSweep, x
     sta $4001, y
-    rts
++   rts
     
 getEnvValueOrMaxVol:
-    cpx #4
+    cpx #4  ; if sfx channel, force volume to max
     bcs ++
-    cpx #3
+    cpx #3  ; adjust index for drum channel
     bne +
     dex
-+   lda nesmus.envValue, x
++   lda nesmus.envValue, x  ; use value from envelope
     rts
-++  lda #$3F
-    cpx #6
+++  lda #$3F                ; force volume to max
+    cpx #6                  ; (sfx pulse channels) OR with sfx duty value
     bcs +
     ora nesmus.sfxDuty-4, x
 +   ldx curStream
@@ -154,6 +167,7 @@ outputVolume:
     lda tmpvar
     and #$F0
     ora tmpvar+1
+    ora #$30
     sta $4000, y
     rts
     
