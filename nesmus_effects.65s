@@ -8,21 +8,23 @@ releaseEnvelope:                            ; get saved envelope var offset
     dec nesmus.streamFlags, x               ; decrement note state
 -   rts
 updateEnvelope:
-    jsr getEnvelopeX            ; get envelope var offset for this stream
-    bcs -                       ; if stream doesn't have envelope, return
-    
-    ldx curStream               ; if note off or held, return
-    lda nesmus.streamFlags, x 
+    lda nesmus.streamFlags, x
     and #3
+    sta tmpvar
     cmp #2
     bcc -
     
-    ldx envX
+    lda envVarsTable.w, x       ; get envelope var offset for this stream
+    lsr
+    bcs -                       ; if stream doesn't have envelope, return
+    tax
+    
     dec nesmus.envTimer, x
     bne -
     inc nesmus.envTimer, x
     
     ; handle note release
+    lda tmpvar
     cmp #3
     bne +
     jsr releaseEnvelope

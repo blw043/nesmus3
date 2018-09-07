@@ -1,24 +1,20 @@
 
 ; loads X with the index of current stream's envelope vars.
 ; carry clear if stream has envelope, set otherwise
-envVarsTable:   .db %000, %0010, %001, %100
+envVarsTable:   .db %000, %0010, %001, %100, %001, %001, %001, %001
 
 ; 17-28 cycles
 getEnvelopeX:
-    cpx #4      ; if not music stream, return
-    bcs +
     lda envVarsTable.w, x
     lsr
     tax
     stx envX
-+   rts
+    rts
     
 ; loads X with the index of current stream's pitch vars.
 pitchVarsTable:
-    .db %0000, %0010, %0100, %0001, %0110, %1000, %1010
+    .db %0000, %0010, %0100, %0001, %0110, %1000, %1010, %0001
 getPitchX:
-    cpx #7
-    bcs +
     lda pitchVarsTable.w, x
     lsr
     tax
@@ -26,10 +22,8 @@ getPitchX:
 +   rts
     
 sweepVarsTable:
-    .db %0000, %0010, %0001, %0001, %0100, %0110
+    .db %0000, %0010, %0001, %0001, %0100, %0110, %0001, %0001
 getSweepX:
-    cpx #6
-    bcs +
     lda sweepVarsTable.w, x
     lsr
     tax
@@ -54,16 +48,16 @@ stopStream:
     rts
     
 setEnvelope:
-    pha
-    jsr getEnvelopeX
-    pla
+    sta tmpvar
+    lda envVarsTable.w, x
+    lsr
     bcs +
+    tax
+    lda tmpvar
     sta nesmus.envId, x
     rts
     
 restartEnvelope:
-    jsr getEnvelopeX
-    bcs +
     lda #1
     sta nesmus.envTimer, x
     lda #0

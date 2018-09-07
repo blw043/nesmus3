@@ -4,9 +4,9 @@ NESMUS3 is the work-in-progress third rewrite of my NES / Famicom sound driver. 
 ## Features
 NESMUS3 supports:
 * music and one sound effect on each of the NES's four PSG channels. DPCM support is not planned.
-* up to 128 volume envelopes for music on pulse channels.
+* up to 128 volume/duty envelopes for music on pulse channels.
 * a separate set of up to 80 "drum" envelopes for music on the noise channel.
-* vibrato and software sweep effects.
+* vibrato and software sweep effects
 
 ## Data formats
 
@@ -21,9 +21,9 @@ The following is a complete listing of all note commands used by NESMUS3.
     7x / 70 xx      Hold note for xx ticks.
     8x / 80 xx      Set length in ticks for following notes.
     9x / 90 xx      Set length in ticks for next note only.
-    Ax              Set note volume. $A0 silences the channel.
-    Bx              Set envelope for music pulse streams (0,1), or set duty cycle for sfx pulse streams (4,5).
+    A0-BF           Set note volume to (byte & $1F). $A0 silences the channel.
     C1-DF           Set tempo in frames per tick to (byte & $1F).
+    Ex              Set envelope for music pulse streams (0,1), or set duty cycle for sfx pulse streams (4,5).
     F0 xxxx         Call subroutine
     F1              Return from subroutine
     F2 xx           Begin loop, set loop counter
@@ -68,5 +68,4 @@ The file `demo.65s` contains a simple host program demonstrating select features
 
 ## Known current issues
 
-The hardware sweep command, $FD, is broken. Apparently 
-
+The hardware sweep command, $FD, is broken. 

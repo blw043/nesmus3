@@ -94,15 +94,13 @@ outputStream:
     bcs outputNoise
 ; output pulse channels    
     jsr outputVolume
-    jsr outputSweep
-    jmp outputPitch
+    jmp outputSweep
     
 outputTriangle:
 ; mute channel if note off or stream volume == 0 or note volume == 0
 ; play sound otherwise
     lda nesmus.streamVolume, x
-    beq muteTriangle
-    lda nesmus.noteVolume, x
+    and nesmus.noteVolume, x
     beq muteTriangle
     lda nesmus.streamFlags, x
     and #3
@@ -126,7 +124,7 @@ outputSweep:
     beq +
     sta nesmus.prevPulseSweep, x
     sta $4001, y
-+   rts
++   jmp outputPitch
     
 getEnvValueOrMaxVol:
     cpx #4  ; if sfx channel, force volume to max
@@ -135,37 +133,40 @@ getEnvValueOrMaxVol:
     bne +
     dex
 +   lda nesmus.envValue, x  ; use value from envelope
-    rts
+    jmp +
 ++  lda #$3F                ; force volume to max
     cpx #6                  ; (sfx pulse channels) OR with sfx duty value
     bcs +
     ora nesmus.sfxDuty-4, x
 +   ldx curStream
-    rts
+    jmp +
     
 -   jmp muteChannel
 outputVolume:
-    jsr getEnvValueOrMaxVol ; get envelope value or sfx volume value
-    sta tmpvar
+    jmp getEnvValueOrMaxVol ; get envelope value or sfx volume value
++   sta tmpvar
     and #$0F
-    sta tmpvar+1
     beq -
-    lda nesmus.streamVolume, x
+    sta tmpvar+1
+    and nesmus.streamVolume, x
+    and nesmus.noteVolume, x
     beq -
     lda nesmus.noteVolume, x
-    beq -
     clc
     adc nesmus.streamVolume, x
     clc
     adc tmpvar+1
     sec
     sbc #30
-    cmp #1
+    cmp #$0F
+    bmi +
+    lda #$0F
++   cmp #1
     bpl +
     lda #1
 +   sta tmpvar+1
     lda tmpvar
-    and #$F0
+    and #$C0
     ora tmpvar+1
     ora #$30
     sta $4000, y

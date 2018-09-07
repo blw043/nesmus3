@@ -40,9 +40,12 @@ startNote:
     and #$FC
     ora #$02
     sta nesmus.streamFlags, x
-    jsr restartEnvelope
-    ldx curStream
-    rts
+    lda envVarsTable.w, x
+    lsr
+    bcs +
+    tax
+    jmp restartEnvelope
++   rts
     
 updateNote:
     dec nesmus.streamTimer, x
@@ -60,13 +63,19 @@ updateNote:
     lda nesmus.notePtrH, x
     sta dataPtr+1
 nextNote:
-    jsr getDataByte
-    sta tmpvar
+    lda (dataPtr), y
+    iny
+    bne +
+    inc dataPtr+1
++   sta tmpvar
     cmp #$F0
-    bcc +
+    bcc ++
+;    cmp #$F7
+;    bne +
+;    jmp noteJump
     and #$0F
     jump_table notes_F0, tmpvar+1
-+   cmp #$50
+++  cmp #$50
     bcc playNote
     cmp #$80
     bcs note_80_EF
@@ -82,28 +91,22 @@ note_7x:
     jmp setNoteTimer
 
 note_80_EF:
-    cmp #$B0
-    bcs note_B0_EF
+    cmp #$C0
+    bcs note_C0_EF
     cmp #$A0
-    bcs note_Ax
+    bcs note_A0_BF
 note_80_9F:
     jmp setNoteLength   
-note_Ax:     
+note_A0_BF:     
     jmp setNoteVolume      
     
-note_B0_EF:
-    cmp #$C0
-    bcs note_C0_DF
-note_Bx: 
-    jmp setEnvelopeOrSfxDuty  ; set envelope (or duty cycle, on sfx pulse)
+note_C0_EF:
+    cmp #$E0
+    bcs note_Ex
 note_C0_DF:
     jmp setTempo
-    
-;+   lsr
-;    lsr
-;    lsr
-;    lsr
-;    jump_table notes_00_EF, tmpvar+1
+note_Ex: 
+    jmp setEnvelopeOrSfxDuty  ; set envelope (or duty cycle, on sfx pulse)
     
 notes_F0:
     .dw callSub             -1
@@ -122,22 +125,6 @@ notes_F0:
     .dw setSweep            -1  ; set hardware sweep registers for pulse
     .dw setDetune           -1
     .dw stopStream          -1
-;notes_00_EF:
-;    .dw playNote            -1  ; play note or drum
-;    .dw playNote            -1
-;    .dw playNote            -1
-;    .dw playNote            -1
-;    .dw playNote            -1
-;    .dw cutRest             -1
-;    .dw releaseRest         -1
-;    .dw setNoteTimer        -1
-;    .dw setNoteLength       -1
-;    .dw setNoteLength       -1
-;    .dw setNoteVolume       -1
-;    .dw setEnvelopeOrSfxDuty-1  ; set envelope (or duty cycle, on sfx pulse)
-;    .dw setTempo            -1
-;    .dw setTempo            -1
-;    .dw nextNote            -1
     
 playNote:
     ; save value as note number
@@ -185,6 +172,7 @@ setNoteTimer:
     jsr getLengthParam
     sta nesmus.noteTimer, x
 commitNotePtr:
+    ldx curStream
     tya
     sta nesmus.notePtrL, x
     lda dataPtr+1
@@ -193,17 +181,16 @@ commitNotePtr:
 
 setNoteLength:
     cmp #$90
-    php
-    lda tmpvar
-    jsr getLengthParam
-    plp
-    sta nesmus.noteTimer, x
+    and #$0F
+    bne +
+    jsr getDataByte
++   sta nesmus.noteTimer, x
     bcs +
     sta nesmus.noteLength, x
     jmp nextNote
 
 setNoteVolume:
-    and #$0F
+    and #$1F
     sta nesmus.noteVolume, x
 -   jmp nextNote
     

@@ -159,7 +159,7 @@ nesmus.drumTable:
     .dw drum.2
     
 sfx0:
-    .db $B2, $82, $25, $B1, $28, $2C, $30, $40, $84, $20, $25, $28, $30, $FF
+    .db $E2, $82, $25, $E1, $28, $2C, $30, $40, $84, $20, $25, $28, $30, $FF
     
 drum.0:
     .db $61, $1C, $59, $C7, $E5, $F4, $F3, $23, $F2, $F1, $02
@@ -174,18 +174,20 @@ nesmus.drumReleaseOffsTable:
 music.0.pulse2:
     .db $A7, $F4, $08
 music.0.pulse1:
-    .db $CC, $B6, $86, $25, $81, $28, $2a, $94, $2c, $2d, $2c, $2a, $28
-    .db $
+    .db $CC, $E6
+@r  .db $86, $25, $81, $28, $2a, $94, $2c, $2d, $2c, $2a, $28
     .db $F7
-    .dw music.0.pulse1
+    .dw @r
 music.0.triangle:
-    .db $C1, $84, $F2, $08, $19, $58, $19, $52, $19, $52, $F3
+    .db $C1, $84, 
+@r  .db $F2, $08, $19, $58, $19, $52, $19, $52, $F3
     .db $F7
-    .dw music.0.triangle
+    .dw @r
 music.0.drum:
-    .db $C6, $81, $F2, $8, $02, $51, $01, $01, $00, $51, $01, $01, $F3
+    .db $C6, $81, 
+@r  .db $F2, $08, $02, $51, $01, $01, $00, $51, $01, $01, $F3
     .db $F7
-    .dw music.0.drum
+    .dw @r
     
 .orga $FFFA
 .section "vectors" size 6 force
