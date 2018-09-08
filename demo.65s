@@ -40,22 +40,11 @@ reset:
     jsr waitForVblank
     jsr waitForVblank
     jsr waitForVblank
-    lda #>music.0.pulse1
-    ldy #<music.0.pulse1
-    ldx #0
-    jsr playStream
-    lda #>music.0.pulse2
-    ldy #<music.0.pulse2
-    ldx #1
-    jsr playStream
-    lda #>music.0.triangle
-    ldy #<music.0.triangle
-    ldx #2
-    jsr playStream
-    lda #>music.0.drum
-    ldy #<music.0.drum
     ldx #3
+-   txa
     jsr playStream
+    dex
+    bpl -
 @loop:
     jsr waitForNMI
     jsr fetchJoypad
@@ -63,11 +52,23 @@ reset:
     jsr readJoypad
     lda prevJoypadInv
     and joypad
+    sta $01
     and #$80    ; check A button pressed
     beq +
-    lda #>sfx0
-    ldy #<sfx0
+    lda #4
     ldx #4
+    jsr playStream
++   lda $01
+    and #$40
+    beq +
+    lda #5
+    ldx #5
+    jsr playStream
++   lda $01
+    and #$20
+    beq +
+    lda #6
+    ldx #7
     jsr playStream
 +   jmp @loop
    
@@ -110,9 +111,12 @@ readJoypad:
     rts
     
 playStream:
-    sta nesmus.notePtrH.w, x
-    tya
+    asl
+    tay
+    lda streamsTable.w, y
     sta nesmus.notePtrL.w, x
+    lda streamsTable+1.w, y
+    sta nesmus.notePtrH.w, x
     jsr nesmus.stopStream
     jmp nesmus.startStream
     
@@ -158,8 +162,15 @@ nesmus.drumTable:
     .dw drum.1
     .dw drum.2
     
-sfx0:
-    .db $E2, $82, $25, $E1, $28, $2C, $30, $40, $84, $20, $25, $28, $30, $FF
+streamsTable:
+    .dw music.0.pulse1
+    .dw music.0.pulse2
+    .dw music.0.triangle
+    .dw music.0.drum
+    .dw sfx0
+    .dw sfx1
+    .dw sfx2
+    
     
 drum.0:
     .db $61, $1C, $59, $C7, $E5, $F4, $F3, $23, $F2, $F1, $02
@@ -176,18 +187,33 @@ music.0.pulse2:
 music.0.pulse1:
     .db $CC, $E6
 @r  .db $86, $25, $81, $28, $2a, $94, $2c, $2d, $2c, $2a, $28
+    .db $93, $27, $25, $93, $27, $23, $96, $20, $1e, $20
+    .db $94, $22, $61, $1b, $c8, $1b, $1e, $22, $96, $27, $82, $27, $26, $27
+    .db $96, $29, $22, $26, $29, $cc, $96, $2a, $81, $c8, $28, $26, $23, $cc
     .db $F7
     .dw @r
 music.0.triangle:
-    .db $C1, $84, 
-@r  .db $F2, $08, $19, $58, $19, $52, $19, $52, $F3
+    .db $C1,  
+@r  .db $84, $F2, $08, $19, $58, $19, $52, $19, $52, $F3
+    .db $F2, $04, $17, $58, $17, $52, $17, $52, $F3
+    .db $F2, $04, $14, $58, $14, $52, $14, $52, $F3
+    .db $F2, $08, $1B, $58, $1B, $52, $1B, $52, $F3
+    .db $F2, $04, $22, $58, $22, $52, $22, $52, $F3
+    .db $F2, $04, $1e, $58, $1e, $52, $1e, $52, $F3
     .db $F7
     .dw @r
 music.0.drum:
     .db $C6, $81, 
-@r  .db $F2, $08, $02, $51, $01, $01, $00, $51, $01, $01, $F3
+@r  .db $F2, $10, $02, $51, $01, $01, $00, $51, $01, $01, $F3
     .db $F7
     .dw @r
+sfx0:
+    .db $E2, $82, $25, $E1, $28, $2C, $30, $40, $84, $20, $25, $28, $30, $FF
+    ; $E2, $FD, $CA, $14, $78, $FF ;
+sfx1:
+    .db $E1, $8F, $14, $A7, $7C, $AF, $86, $15, $85, $16, $17, $18, $FF
+sfx2:
+    .db $87, $AB, $02, $85, $0A, $07, $05, $03, $02, $FF
     
 .orga $FFFA
 .section "vectors" size 6 force

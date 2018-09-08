@@ -32,22 +32,35 @@ outputPitch:
     adc #$80
     sta tmpvar
     
+    ldy curChannel
+    cpy #2
+    bne +
     ldy outputOffs
-    lda nesmus.periodL, x   ; write low period
+    lda nesmus.periodL, x
+    sta $4002, y
+    lda nesmus.periodH, x
+    sta $4003, y
+    jmp +++
+    
++   lda nesmus.periodL, x   ; write low period
     clc
     adc nesmus.noteDetune, x
+    php
+    cmp nesmus.prevPeriodL, y
+    beq +
+    sta nesmus.prevPeriodL, y
+    ldy outputOffs
     sta $4002, y
+    ldy curChannel
++:  plp
     lda nesmus.periodH, x   ; get high period
     adc tmpvar
     and #7
-    ldy curChannel          ; if triangle channel, continue
-    cpy #2
-    beq +
-    cmp nesmus.prevPulsePeriodH, y  ; for pulse channels, only write high period if different from current value
+    cmp nesmus.prevPeriodH, y
     beq +++
-    sta nesmus.prevPulsePeriodH, y  
-+   ldy outputOffs  ; write the high period
-    ora #$80        ; (set a length counter bit)
+    sta nesmus.prevPeriodH, y
+    ldy outputOffs
+    ora #$80
     sta $4003, y
 @done
 +++ ldx curStream
@@ -148,10 +161,10 @@ outputVolume:
     and #$0F
     beq -
     sta tmpvar+1
-    and nesmus.streamVolume, x
-    and nesmus.noteVolume, x
+    lda nesmus.streamVolume, x
     beq -
     lda nesmus.noteVolume, x
+    beq -
     clc
     adc nesmus.streamVolume, x
     clc

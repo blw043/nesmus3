@@ -139,7 +139,7 @@ playNote:
     
     ; for sfx noise, just use note as is 
 +   cpx #7
-    bcs commitNotePtr
+    bcs ++
     
     ; streams with pitch
     ; load X with offset for this stream's pitch variables
@@ -156,7 +156,6 @@ playNote:
     sta nesmus.periodH, x
     ldy tmpvar+1 ;restore y
     ldx curStream
-    
     ; set note state
 ++  jsr startNote
     jmp commitNotePtr
@@ -254,7 +253,7 @@ beginLoop:
     
 endLoop:
     dec nesmus.noteLoopCount, x
-    bne +
+    beq +
     ldy nesmus.noteLoopPtrL, x
     lda nesmus.noteLoopPtrH, x
     sta dataPtr+1

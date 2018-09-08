@@ -45,7 +45,13 @@ stopStream:
     sta nesmus.streamFlags, x
     lda #$0F
     sta nesmus.noteVolume, x
-    rts
+    lda sweepVarsTable.w, x
+    lsr
+    bcs +
+    tay
+    lda #$0F
+    sta nesmus.pulseSweep, y
++   rts
     
 setEnvelope:
     sta tmpvar
@@ -91,8 +97,12 @@ initEngine:
     bpl -
     lda #$0F
     sta $4015
-    sta nesmus.prevPulsePeriodH
-    sta nesmus.prevPulsePeriodH+1
+    sta nesmus.prevPulseSweep
+    sta nesmus.prevPulseSweep+1
+    ldx #6
+-   sta nesmus.prevPeriodL,x
+    dex
+    bne -
 ; initialize streams
     ldx #7
 -   stx curStream
