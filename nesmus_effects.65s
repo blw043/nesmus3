@@ -41,16 +41,17 @@ updateEnvelope:
     ldy nesmus.envOffs, x
 nextEnvCmd:
     lda (dataPtr), y    ; get next command byte
-    cmp #$FF            ; $FF = hold previous value
+    iny
+    cmp #$FD
+    bcc @readEnvValue
+    cmp #$FF
     beq env.holdValue
-+   iny
-    cmp #$FE            ; $FE = jump to offset
-    bne +
+    cmp #$FE
+    bne env.cutNote
     lda (dataPtr), y
     tay
     jmp nextEnvCmd
-+   cmp #$FD
-    beq env.cutNote
+@readEnvValue:
     sta tmpvar          ; save command
     and #$CF            ; save envelope value
     sta nesmus.envValue, x
@@ -87,9 +88,9 @@ updateDrumEnvelope:
 nextDrumEnv:
     lda nesmus.drumBytes    ; more bytes in this chunk?
     beq drumChunkHeader     ; if not, read chunk header
-readDrumValue:
-    dec nesmus.drumBytes    ; decrement byte count
     lda nesmus.drumLength   ; reload length
+readDrumValue:
+    dec nesmus.drumBytes
     sta nesmus.drumTimer    
     lda (dataPtr), y        ; get next envelope value
     iny
@@ -98,10 +99,11 @@ readDrumValue:
     rts
 drumChunkHeader:
     lda (dataPtr), y        ; else read chunk header byte
-    beq env.holdValue      ; zero -> we're done, hold last value
-    sta tmpvar              ; else save
+    beq env.holdValue       ; zero -> we're done, hold last value
     cmp #$10                ; $00-$0F -> special commands
     bcc +
+    iny
+    sta tmpvar
     lsr                     ; else: byte count in upper nybble
     lsr
     lsr
@@ -129,11 +131,11 @@ drum.setOffs:
 updatePitchbend:
     ldx curStream
     lda nesmus.streamFlags, x  
-    sta tmpvar
     and #PFX_ENABLE
     bne +
 -   rts
-+   jsr getPitchX
++   sta tmpvar
+    jsr getPitchX
     ; decrement pitchbend timer
     dec nesmus.pitchbendTimer, x
     bne -
