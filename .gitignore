@@ -1,4 +1,5 @@
 *.o
 *.nes
 *.l
+*.deb
 *.sym
