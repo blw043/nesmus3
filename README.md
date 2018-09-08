@@ -82,14 +82,16 @@ Bytes $00-$02 are special commands: `$00` = hold envelope value, `$01 xx` = jump
 ## Building
 NESMUS3 is written in 6502 assembly for the [WLA DX] (https://github.com/vhelin/wla-dx) toolchain. It is intended to be incorporated as a library into other programs.
 
+The engine uses 16 bytes in the zero page and 171 bytes in the stack page, and requires around 1,300 to 2,500 CPU cycles (around 30 scanlines) depending mostly on how many note commands are being processed. In the future I may try to optimize this.
+
 To assemble NESMUS3 as a WLA DX library file use the command
 
     wla-6502 -l nesmus.l nesmus.65s
 
 A program using NESMUS3 must supply the labels `nesmus.envelopeTable`, `nesmus.envReleaseOffsTable`, `nesmus.drumTable`. These are used as lookup tables by the envelope system.
 
-The file `demo.65s` contains a simple host program demonstrating select features of NESMUS3.
+The file `demo.65s` contains a simple host program demonstrating select features of NESMUS3, like how notes and envelopes work and how to play music and sound effects.
 
 ## Known current issues
 
-The hardware sweep command, $FD, is broken. 
+Support for hardware sweep is broken.
