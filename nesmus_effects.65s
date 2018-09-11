@@ -18,9 +18,9 @@ updateEnvelope:
     dex
 +   cmp #3
     beq releaseEnvelope
-@getEnvPtr
     dec nesmus.envTimer, x      ; decrement envelope timer
     bne -                       ; return if not expired
+@getEnvPtr
     lda nesmus.envId, x ; use envelope id (for drums, this equals the current note) as pointer-table index
     asl
     tay
@@ -135,7 +135,7 @@ updatePitchbend:
     bne @return
     lda nesmus.pitchbendSpeed, x
     sta nesmus.pitchbendTimer, x
-    ; if vibrato mode, handle things slightly differently
+    
     lda tmpvar
     cmp #PFX_VIBRATO
     beq updateVibrato
@@ -143,8 +143,6 @@ updatePitchbend:
     beq pitchbendDown
     cmp #PFX_PORTA_UP
     beq pitchbendUp
-    
-    
     
 pitchbendDown:
     lda nesmus.pitchbendDelta, x

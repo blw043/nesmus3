@@ -54,10 +54,17 @@ stopStream:
 @resetDetune
     lda pitchVarsTable.w, x
     lsr
-    bcs @done
+    bcs @resetPitchbend
     tay
     lda #0
     sta nesmus.noteDetune, y
+@resetPitchbend
+    cpx #3
+    bcs @done
+    sta nesmus.pitchbendDelta, x
+    lda #1
+    sta nesmus.pitchbendSpeed, x
+    sta nesmus.pitchbendTimer, x
 @done
     rts
     

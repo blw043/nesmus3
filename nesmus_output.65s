@@ -106,7 +106,10 @@ outputStream:
     bmi @checkMask
 @muteStream
     cpx #4
-    bcc muteChannel
+    bcs @return
+    lda channelBits+4.w, x
+    and outputMask
+    beq muteChannel
 @return
     rts
     

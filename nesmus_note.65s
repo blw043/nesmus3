@@ -285,8 +285,8 @@ pitchbendPortaDown:
     and #%10000011
     ora tmpvar
     sta nesmus.streamFlags, x
-    lda tmpvar
-    bne pitchbendSetParams
+    ;lda tmpvar
+    ;bne pitchbendSetParams
     jmp nextNote
     
 notes_FC_FF:
