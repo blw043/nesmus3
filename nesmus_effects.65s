@@ -6,28 +6,21 @@ releaseEnvelope:                            ; get saved envelope var offset
     lda nesmus.drumReleaseOffsTable.w, y
 +   sta nesmus.envOffs, x                   ; save new offset
     dec nesmus.streamFlags, x               ; decrement note state
+    jmp updateEnvelope@getEnvPtr
 -   rts
-
 updateEnvelope:
     lda nesmus.streamFlags, x   ; check note state
     and #3
     cmp #2                      ; if note in "off" or "held" state, return
     bcc -
-    sta tmpvar                  ; otherwise save note state
-    
-    lda envVarsTable.w, x       ; get envelope var offset for this stream
-    lsr                         ; we don't need to branch here, 
-    tax
-    
+    cpx #3                      ; for drum channel, decrement to get envelope var offset
+    bne +
+    dex
++   cmp #3
+    beq releaseEnvelope
+@getEnvPtr
     dec nesmus.envTimer, x      ; decrement envelope timer
     bne -                       ; return if not expired
-    
-    ; handle note release
-    lda tmpvar
-    cmp #3
-    bne @getEnvPtr
-    jsr releaseEnvelope
-@getEnvPtr
     lda nesmus.envId, x ; use envelope id (for drums, this equals the current note) as pointer-table index
     asl
     tay
@@ -130,27 +123,28 @@ drum.setOffs:
     
 updatePitchbend:
     ldx curStream
-    lda nesmus.streamFlags, x  
-    and #PFX_ENABLE
-    bne +
--   rts
-+   sta tmpvar
-    jsr getPitchX
+    lda nesmus.streamFlags, x
+    and #PFX_MASK
+    bne @enabled
+@return
+    rts
+@enabled
+    sta tmpvar
     ; decrement pitchbend timer
     dec nesmus.pitchbendTimer, x
-    bne -
+    bne @return
     lda nesmus.pitchbendSpeed, x
     sta nesmus.pitchbendTimer, x
     ; if vibrato mode, handle things slightly differently
     lda tmpvar
-    and #PFX_MASK
+    cmp #PFX_VIBRATO
+    beq updateVibrato
     cmp #PFX_PORTA_DOWN
     beq pitchbendDown
     cmp #PFX_PORTA_UP
     beq pitchbendUp
-    cmp #PFX_VIBRATO
-    beq updateVibrato
-    rts
+    
+    
     
 pitchbendDown:
     lda nesmus.pitchbendDelta, x
@@ -158,20 +152,22 @@ pitchbendDown:
     
 ; this creates a 4-phase vibrato cycle
 updateVibrato:
-    lda tmpvar
-    eor #PFX_VIBRATO_TOG
+    lda nesmus.streamFlags, x
+    adc #%00001111      ; carry is set here
+    and #%00110000
     sta tmpvar
-    and #PFX_VIBRATO_TOG
-    beq +
+    lda nesmus.streamFlags, x
+    and #%11001111
+    ora tmpvar
+    sta nesmus.streamFlags, x
     lda tmpvar
-    eor #PFX_VIBRATO_DIR
-    sta tmpvar
-    and #PFX_VIBRATO_DIR
-+   bne pitchbendDown
+    cmp #%00100000
+    bcs pitchbendDown
+    ; jmp pitchbendUp
     
 pitchbendUp:
     lda nesmus.pitchbendDelta, x
-    jmp subtractPeriod
+    ; jmp subtractPeriod
     
 subtractPeriod:
     sta tmpvar

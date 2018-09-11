@@ -52,13 +52,15 @@ startNote:
     
 updateNote:
     dec nesmus.streamTimer, x
-    bne +
+    bne @return
     lda nesmus.streamTempo, x
     sta nesmus.streamTimer, x
     dec nesmus.noteTimer, x
-    beq ++
-+   rts
-++  lda nesmus.noteLength, x
+    beq @reloadLength
+@return
+    rts
+@reloadLength
+    lda nesmus.noteLength, x
     sta nesmus.noteTimer, x
     lda #0
     sta dataPtr
@@ -72,62 +74,34 @@ nextNote:
     inc dataPtr+1
 +   sta tmpvar
     cmp #$F0
-    bcc ++
-;    cmp #$F7
-;    bne +
-;    jmp noteJump
-    and #$0F
-    jump_table notes_F0, tmpvar+1
-++  cmp #$50
-    bcc playNote
+    bcc notes_00_EF
+    jmp notes_F0_FF
+notes_00_EF
     cmp #$80
     bcs note_80_EF
+    cmp #$50
+    bcc playNote
     cmp #$70
-    bcs note_7x
+    bcs setNoteTimer
     cmp #$60
-    bcs note_6x
-note_5x:           
-    jmp cutRest      
-note_6x:
-    jmp releaseRest  
-note_7x:    
+    bcs releaseRest
+cutRest:
+    jsr cutNote
     jmp setNoteTimer
-
-note_80_EF:
-    cmp #$C0
-    bcs note_C0_EF
-    cmp #$A0
-    bcs note_A0_BF
-note_80_9F:
-    jmp setNoteLength   
-note_A0_BF:     
-    jmp setNoteVolume      
     
-note_C0_EF:
-    cmp #$E0
-    bcs note_Ex
-note_C0_DF:
-    jmp setTempo
-note_Ex: 
-    jmp setEnvelopeOrSfxDuty  ; set envelope (or duty cycle, on sfx pulse)
-    
-notes_F0:
-    .dw callSub             -1
-    .dw returnSub           -1
-    .dw beginLoop           -1
-    .dw endLoop             -1
-    .dw cutDelay            -1
-    .dw releaseDelay        -1
-    .dw holdDelay           -1
-    .dw noteJump            -1
-    .dw pitchbendOff        -1
-    .dw pitchbendVibrato    -1
-    .dw pitchbendPortaDown  -1
-    .dw pitchbendPortaUp    -1
-    .dw pitchbendSetParams  -1
-    .dw setSweep            -1  ; set hardware sweep registers for pulse
-    .dw setDetune           -1
-    .dw stopStream          -1
+releaseRest:
+    jsr releaseNote
+setNoteTimer:
+    lda tmpvar
+    jsr getLengthParam
+    sta nesmus.noteTimer, x
+commitNotePtr:
+    ldx curStream
+    tya
+    sta nesmus.notePtrL, x
+    lda dataPtr+1
+    sta nesmus.notePtrH, x
+    rts   
     
 playNote:
     ; save value as note number
@@ -145,12 +119,8 @@ playNote:
     ; streams with pitch
     ; load X with offset for this stream's pitch variables
 @getPeriod
-    lda #$7F                    ; sign extend detune from 8 to 16 bits
-    cmp nesmus.noteDetune, x    ; (carry is set if <= $7F)
-    adc #$80
-    pha
     
-    ; lookup 11-bit note period from table
+    ; lookup 11-bit note period from table and add detune
     sty tmpvar+1 ; save y
     ldy tmpvar
     
@@ -158,7 +128,11 @@ playNote:
     clc
     adc nesmus.noteDetune, x
     sta nesmus.periodL, x
-    pla
+    
+    lda #$7F                    ; sign extend detune from to 16 bits
+    cmp nesmus.noteDetune, x    ; (carry is set if <= $7F)
+    adc #$80
+    lda #$FF
     adc periodTableH.w, y
     sta nesmus.periodH, x
     
@@ -173,23 +147,11 @@ playNote:
     sta nesmus.drumId ; use note number as drum envelope id
     beq @useNote    ; BRA
     
-cutRest:
-    jsr cutNote
-    jmp setNoteTimer
-    
-releaseRest:
-    jsr releaseNote
-setNoteTimer:
-    lda tmpvar
-    jsr getLengthParam
-    sta nesmus.noteTimer, x
-commitNotePtr:
-    ldx curStream
-    tya
-    sta nesmus.notePtrL, x
-    lda dataPtr+1
-    sta nesmus.notePtrH, x
-    rts
+note_80_EF:
+    cmp #$C0
+    bcs note_C0_EF
+    cmp #$A0
+    bcs setNoteVolume
 
 setNoteLength:
     cmp #$90
@@ -205,6 +167,11 @@ setNoteVolume:
     and #$1F
     sta nesmus.noteVolume, x
 -   jmp nextNote
+    
+    
+note_C0_EF:
+    cmp #$E0
+    bcc setTempo
     
 setEnvelopeOrSfxDuty:
     ldx curChannel
@@ -234,6 +201,16 @@ setTempo:
     sta nesmus.streamTimer, x
     jmp nextNote
     
+notes_F0_FF:
+    cmp #$F8
+    bcs notes_F8_FF
+    cmp #$F4
+    bcs notes_F4_F7
+    cmp #$F2
+    bcs notes_F2_F3
+    cmp #$F1
+    bcs returnSub
+
 callSub:
     jsr getDataWord
     sta tmpvar+1
@@ -255,6 +232,9 @@ returnSub:
     sta dataPtr+1
     jmp nextNote
     
+notes_F2_F3
+    cmp #$F3
+    beq endLoop
 beginLoop:
     jsr getDataByte
     sta nesmus.noteLoopCount, x
@@ -272,6 +252,12 @@ endLoop:
     sta dataPtr+1
 +   jmp nextNote
     
+notes_F4_F7:
+    cmp #$F7
+    beq noteJump
+    cmp #$F5
+    beq releaseDelay
+    bcs holdDelay
 cutDelay:
     jsr cutNote
     bne holdDelay  ; should be nonzero if stream is enabled
@@ -284,26 +270,35 @@ holdDelay:
     sta nesmus.noteLength, x
     jmp commitNotePtr
     
+notes_F8_FF:
+    cmp #$FC
+    bcs notes_FC_FF
 pitchbendOff:
 pitchbendVibrato:
 pitchbendPortaUp:
 pitchbendPortaDown:
     and #$03
-    sty tmpvar+1
-    tay
+    asl
+    asl
+    sta tmpvar
     lda nesmus.streamFlags, x
     and #%10000011
-    ora pitchbendModeTable.w, x
+    ora tmpvar
     sta nesmus.streamFlags, x
-    ldy tmpvar+1
+    lda tmpvar
+    bne pitchbendSetParams
     jmp nextNote
     
-pitchbendModeTable: .db PFX_OFF, PFX_VIBRATO, PFX_PORTA_UP, PFX_PORTA_DOWN
-    
+notes_FC_FF:
+    cmp #$FF
+    beq endStream
+    cmp #$FD
+    beq setSweep
+    bcs setDetune
 pitchbendSetParams:
-    jsr getPitchX
+    cpx #3
+    bcs setDetune@done
     jsr getDataByte
-    bcs +
     sta tmpvar
     and #$0F
     sta nesmus.pitchbendDelta, x
@@ -313,21 +308,22 @@ pitchbendSetParams:
     lsr
     lsr
     sta nesmus.pitchbendSpeed, x
-    jmp +
+    jmp setDetune@done
     
 setSweep:
     jsr getSweepX
-    bcs +
+    bcs setDetune@done
     jsr getDataByte
     sta nesmus.pulseSweep, x
-    jmp +
+    jmp setDetune@done
     
 setDetune:
     jsr getPitchX
+    bcs @done
     jsr getDataByte
-    bcs +
     sta nesmus.noteDetune, x
-+   ldx curStream
+@done
+    ldx curStream
     jmp nextNote
     
 endStream:

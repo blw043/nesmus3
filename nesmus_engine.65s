@@ -129,7 +129,8 @@ updateEngine:
     lda #0
     sta outputMask
     sta newNoteFlags
--   stx curStream             ; get channel & output offset
+@loop
+    stx curStream             ; get channel & output offset
     txa
     and #3
     sta curChannel
@@ -137,31 +138,33 @@ updateEngine:
     asl
     sta outputOffs
     lda nesmus.streamFlags, x ; skip stream if disabled
-    bpl ++
+    bpl @nextStream
     jsr updateNote
     lda nesmus.streamFlags, x ; note state may have changed. reload it
-    bpl ++                    ; if still enabled, continue
-+   and #%0011                ; if note off, continue
-    beq ++
+    bpl @nextStream           ; if still enabled, continue
+    and #%0011                ; if note off, continue
+    beq @nextStream
     jsr updateEffects         ; update envelope and pitch effects, if applicable
-    ldx curStream
-++  jsr outputStream
+@nextStream
+    jsr outputStream
     ldx curStream
     dex
-    bpl -
+    bpl @loop
     rts
+    
 ; effect mask determines which effects this stream supports.
 ;   d0: 1 = envelope supported, 0 = not supported
 ;   d1: 1 = pitchbend supported, 0 = not supported
-streamEffectMasks:  .db %11, %11, %10, %01, %10, %10, %10, %00
 updateEffects:
-    ldx curStream
-    lda streamEffectMasks.w, x
-    lsr
-    sta effectMask
-    bcc +
+    cpx #4
+    bcs @done
+    cpx #2
+    beq +
     jsr updateEnvelope
-+   lsr effectMask
-    bcc +
-    jmp updatePitchbend
-+   rts
+    ldx curStream
++   cpx #3
+    beq @done
+    jsr updatePitchbend
+    ldx curStream
+@done
+    rts

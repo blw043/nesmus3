@@ -10,22 +10,20 @@
 .define newNoteFlags $FC
 .define dataPtr      $FE
 
-.define NOTE_STATE      %00000011
-.define NOTE_OFF        %00000000
-.define NOTE_ATTACK     %00000001
-.define NOTE_SUSTAIN    %00000010
-.define NOTE_RELEASE    %00000011
-.define PFX_OFF         %00000000
-.define PFX_DETUNE      %00010000
-.define PFX_ENABLE      %00010000
-.define PFX_VIBRATO     %00010100
-.define PFX_PORTA_UP    %00011000
-.define PFX_PORTA_DOWN  %00011100
-.define PFX_MASK        %00011100
-.define PFX_VIBRATO_DIR %00100000   ; 0 = up, 1 = down
-.define PFX_VIBRATO_TOG %01000000
-.define STREAM_OFF      %00000000
-.define STREAM_ENABLED  %10000000
+.define NOTE_STATE          %00000011
+.define NOTE_OFF            %00000000
+.define NOTE_ATTACK         %00000001
+.define NOTE_SUSTAIN        %00000010
+.define NOTE_RELEASE        %00000011
+.define PFX_OFF             %00000000
+.define PFX_VIBRATO         %00000100
+.define PFX_PORTA_UP        %00001000
+.define PFX_PORTA_DOWN      %00001100
+.define PFX_MASK            %00001100
+.define PFX_VIBRATO_PHASE   %00110000
+.define STREAM_OFF          %00000000
+.define STREAM_ENABLED      %10000000
+.define NEW_NOTE            %01000000
 
 .enum $100 EXPORT
     ; the following apply to all channels

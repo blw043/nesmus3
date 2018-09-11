@@ -20,12 +20,14 @@ outputSweep:
     dex
     dex
 +   lda nesmus.pulseSweep, x
-    bmi +
+    bmi @checkPrev  ; if sweep is disabled at all, output $0F (sweep up, speed 0, shift 7)
     lda #$0F
-+   ldx curChannel
-    cmp nesmus.prevPulseSweep, x
-    beq outputPulsePeriod
-    sta nesmus.prevPulseSweep, x
+@checkPrev
+    ldx curChannel ;3
+    cmp nesmus.prevPulseSweep, x ;4
+    beq outputPulsePeriod ;2
+    sta nesmus.prevPulseSweep, x ;5
+@writeSweep
     sta $4001, y
 
 outputPulsePeriod:
@@ -34,25 +36,26 @@ outputPulsePeriod:
     bcc +
     dex
     
-+   ldy curChannel                  ; if hardware sweep disabled, branch for software pitch
++   ldy curChannel                  
     lda nesmus.prevPulseSweep, y
-    bpl @checkPeriodH
+    bpl @checkPeriodH               ; if hardware sweep disabled, continue
     ldy curStream                   ; else check if new note started
     lda newNoteFlags
     and streamBits.w, y
     beq @done                       ; if not, do nothing
-    lda nesmus.periodH, x           ; else load high period and branch to output
+    lda #$0F                        ; invalidate previous high period
+    ldy curChannel
+    sta nesmus.prevPeriodH, y
+    lda nesmus.periodH, x           ; load high period and branch to output
     jmp @writePeriodH
     
-@checkPeriodH
-    ldy curChannel                  
+@checkPeriodH                 
     lda nesmus.periodH, x           ; get high period
     and #7
     cmp nesmus.prevPeriodH, y       ; skip writing if not changed
-    beq @writePeriodL    
-@writePeriodH
-    ldy curChannel 
+    beq @writePeriodL
     sta nesmus.prevPeriodH, y
+@writePeriodH
     ldy outputOffs
     ora #$80
     sta $4003, y
@@ -71,6 +74,7 @@ outputNoisePeriod:
     lda nesmus.curNote+7
     and #$0F
 @writeNoise
+    eor #$0F
     sta $400E
     lda #$80
     sta $400F
@@ -81,7 +85,6 @@ outputNoisePeriod:
     lsr
     lsr
     lsr
-    eor #$0F
     jmp @writeNoise
     
 muteChannel:
@@ -95,26 +98,27 @@ muteTriangle:
     sta $4008
     lda #$87
     sta $400B
---  rts
+    rts
 
 outputStream:
     ldy outputOffs
     lda nesmus.streamFlags, x
-    bmi +
--   cpx #4
+    bmi @checkMask
+@muteStream
+    cpx #4
     bcc muteChannel
+@return
     rts
-; check for note off 
     
 ; check if there is already output on this channel. skip this one if yes.
-+   lda channelBits.w, x
+@checkMask
+    lda channelBits.w, x
     and outputMask
-    bne --
+    bne @return
     lda nesmus.streamFlags, x
     and #3
-    beq -
+    beq @muteStream
     
-; if stream is enabled, go ahead. otherwise, for music streams (0-3) mute the channel, for sfx streams just skip
 ; set flag for this channel in output mask
 +   lda channelBits.w, x
     ora outputMask
@@ -127,11 +131,16 @@ outputStream:
     jsr outputVolume
     jmp outputSweep
     
+outputNoise:
+    jsr outputVolume
+    jmp outputNoisePeriod
+    
 outputTriangle:
 ; mute channel if note off or stream volume == 0 or note volume == 0
 ; play sound otherwise
     lda nesmus.streamVolume, x
-    and nesmus.noteVolume, x
+    beq muteTriangle
+    lda nesmus.noteVolume, x
     beq muteTriangle
     lda nesmus.streamFlags, x
     and #3
@@ -140,9 +149,6 @@ outputTriangle:
     sta $4008
     jmp outputTrianglePeriod
     
-outputNoise:
-    jsr outputVolume
-    jmp outputNoisePeriod
     
 -   jmp muteChannel
 outputVolume:
@@ -157,31 +163,31 @@ outputVolume:
 @sfx
     lda #$0F
     cpx #6
-    bcs +
+    bcs applyGain
     ora nesmus.sfxDuty-4, x
-    ldx curStream
 applyGain:
     sta tmpvar
     and #$0F
     beq -
     sta tmpvar+1
     lda nesmus.streamVolume, x
-    beq -
-    lda nesmus.noteVolume, x
-    beq -
     clc
-    adc nesmus.streamVolume, x
+    adc nesmus.noteVolume, x
+    beq -
     clc
     adc tmpvar+1
     sec
     sbc #30
-    cmp #$0F
+    cmp #$10
     bmi +
+@maxVolume
     lda #$0F
+    bne @writeVolume
 +   cmp #1
-    bpl +
+    bpl @writeVolume
     lda #1
-+   sta tmpvar+1
+@writeVolume
+    sta tmpvar+1
     lda tmpvar
     and #$C0
     ora tmpvar+1
