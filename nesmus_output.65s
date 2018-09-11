@@ -1,70 +1,88 @@
 
 channelBits:    .db 1, 2, 4, 8, 1, 2, 4, 8
 
-outputPitch:
-    ldx curChannel  ; if not noise channel, branch to handle 11-bit period
-    cpx #3
-    bcc ++
-    ldx curStream   ; we have noise channel. check whether it's music or sfx
-    cpx #7          ; if music noise (drums), branch
-    bne +           
-    lda nesmus.curNote+7    ; sfx: use current note modulo 16 as noise period
+outputTrianglePeriod:
+    ldx curStream
+    cpx #4          ; get offset for pitch vars
+    bcc +
+    dex
++   lda nesmus.periodL, x
+    sta $400A
+    lda nesmus.periodH, x
+    ora #$80
+    sta $400B
+    ldx curStream
+    rts
+
+outputSweep:
+    cpx #4
+    bcc +
+    dex
+    dex
++   lda nesmus.pulseSweep, x
+    bmi +
+    lda #$0F
++   ldx curChannel
+    cmp nesmus.prevPulseSweep, x
+    beq outputPulsePeriod
+    sta nesmus.prevPulseSweep, x
+    sta $4001, y
+
+outputPulsePeriod:
+    ldx curStream                   ; get offset for pitch vars
+    cpx #4          
+    bcc +
+    dex
+    
++   ldy curChannel                  ; if hardware sweep disabled, branch for software pitch
+    lda nesmus.prevPulseSweep, y
+    bpl @checkPeriodH
+    ldy curStream                   ; else check if new note started
+    lda newNoteFlags
+    and streamBits.w, y
+    beq @done                       ; if not, do nothing
+    lda nesmus.periodH, x           ; else load high period and branch to output
+    jmp @writePeriodH
+    
+@checkPeriodH
+    ldy curChannel                  
+    lda nesmus.periodH, x           ; get high period
+    and #7
+    cmp nesmus.prevPeriodH, y       ; skip writing if not changed
+    beq @writePeriodL    
+@writePeriodH
+    ldy curChannel 
+    sta nesmus.prevPeriodH, y
+    ldy outputOffs
+    ora #$80
+    sta $4003, y
+@writePeriodL
+    ldy outputOffs
+    lda nesmus.periodL, x           ; else, write low period if changed
+    sta $4002, y
+@done    
+    ldx curStream
+    rts
+    
+outputNoisePeriod:
+    ldx curStream
+    cpx #7
+    bne @drum
+    lda nesmus.curNote+7
     and #$0F
--   sta $400E
+@writeNoise
+    sta $400E
     lda #$80
     sta $400F
-    jmp +++
-+   lda nesmus.envValue+2   ; drums: use upper nybble from drum envelope as noise period
+    bne outputPulsePeriod@done
+@drum
+    lda nesmus.envValue+2
     lsr
     lsr
     lsr
     lsr
     eor #$0F
-    jmp -
-    
-++  ldx curStream   ; non-noise channels. use stored period value
-    cpx #4          ; get offset for pitch vars
-    bcc +
-    dex
-    
-+   lda #$7F                    ; sign extend detune from 8 to 16 bits
-    cmp nesmus.noteDetune, x    ; (carry is set if <= $7F)
-    adc #$80
-    sta tmpvar
-    
-    ldy curChannel
-    cpy #2
-    bne +
-    ldy outputOffs
-    lda nesmus.periodL, x
-    sta $4002, y
-    lda nesmus.periodH, x
-    sta $4003, y
-    jmp +++
-    
-+   lda nesmus.periodL, x   ; write low period
-    clc
-    adc nesmus.noteDetune, x
-    php
-    cmp nesmus.prevPeriodL, y
-    beq +
-    sta nesmus.prevPeriodL, y
-    ldy outputOffs
-    sta $4002, y
-    ldy curChannel
-+:  plp
-    lda nesmus.periodH, x   ; get high period
-    adc tmpvar
-    and #7
-    cmp nesmus.prevPeriodH, y
-    beq +++
-    sta nesmus.prevPeriodH, y
-    ldy outputOffs
-    ora #$80
-    sta $4003, y
-@done
-+++ ldx curStream
-    rts
+    jmp @writeNoise
     
 muteChannel:
     cpy #8
@@ -120,44 +138,30 @@ outputTriangle:
     beq muteTriangle
     lda #$FF
     sta $4008
-    jmp outputPitch
+    jmp outputTrianglePeriod
     
 outputNoise:
     jsr outputVolume
-    jmp outputPitch
-    
-outputSweep:
-    cpx #4
-    bcc +
-    dex
-    dex
-+   lda nesmus.pulseSweep, x
-    ldx curChannel
-    cmp nesmus.prevPulseSweep, x
-    beq +
-    sta nesmus.prevPulseSweep, x
-    sta $4001, y
-+   jmp outputPitch
-    
-getEnvValueOrMaxVol:
-    cpx #4  ; if sfx channel, force volume to max
-    bcs ++
-    cpx #3  ; adjust index for drum channel
-    bne +
-    dex
-+   lda nesmus.envValue, x  ; use value from envelope
-    jmp +
-++  lda #$3F                ; force volume to max
-    cpx #6                  ; (sfx pulse channels) OR with sfx duty value
-    bcs +
-    ora nesmus.sfxDuty-4, x
-+   ldx curStream
-    jmp +
+    jmp outputNoisePeriod
     
 -   jmp muteChannel
 outputVolume:
-    jmp getEnvValueOrMaxVol ; get envelope value or sfx volume value
-+   sta tmpvar
+    cpx #4
+    bcs @sfx
+@envelope
+    cpx #3
+    bne +
+    dex
++   lda nesmus.envValue, x
+    jmp applyGain
+@sfx
+    lda #$0F
+    cpx #6
+    bcs +
+    ora nesmus.sfxDuty-4, x
+    ldx curStream
+applyGain:
+    sta tmpvar
     and #$0F
     beq -
     sta tmpvar+1

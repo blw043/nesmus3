@@ -7,29 +7,28 @@ releaseEnvelope:                            ; get saved envelope var offset
 +   sta nesmus.envOffs, x                   ; save new offset
     dec nesmus.streamFlags, x               ; decrement note state
 -   rts
+
 updateEnvelope:
-    lda nesmus.streamFlags, x
+    lda nesmus.streamFlags, x   ; check note state
     and #3
-    sta tmpvar
-    cmp #2
+    cmp #2                      ; if note in "off" or "held" state, return
     bcc -
+    sta tmpvar                  ; otherwise save note state
     
     lda envVarsTable.w, x       ; get envelope var offset for this stream
-    lsr
-    bcs -                       ; if stream doesn't have envelope, return
+    lsr                         ; we don't need to branch here, 
     tax
     
-    dec nesmus.envTimer, x
-    bne -
-    inc nesmus.envTimer, x
+    dec nesmus.envTimer, x      ; decrement envelope timer
+    bne -                       ; return if not expired
     
     ; handle note release
     lda tmpvar
     cmp #3
-    bne +
+    bne @getEnvPtr
     jsr releaseEnvelope
-    
-+   lda nesmus.envId, x ; use envelope id (for drums, this equals the current note) as pointer-table index
+@getEnvPtr
+    lda nesmus.envId, x ; use envelope id (for drums, this equals the current note) as pointer-table index
     asl
     tay
     cpx #2
@@ -55,6 +54,7 @@ nextEnvCmd:
     sta tmpvar          ; save command
     and #$CF            ; save envelope value
     sta nesmus.envValue, x
+    inc nesmus.envTimer, x  ; default envelope timer = 1 frame
     lda tmpvar          ; d4 set -> read length byte
     and #$10
     beq +

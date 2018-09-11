@@ -40,11 +40,8 @@ reset:
     jsr waitForVblank
     jsr waitForVblank
     jsr waitForVblank
-    ldx #3
--   txa
-    jsr playStream
-    dex
-    bpl -
+    lda #0
+    jsr playMusic
 @loop:
     jsr waitForNMI
     jsr fetchJoypad
@@ -53,23 +50,21 @@ reset:
     lda prevJoypadInv
     and joypad
     sta $01
-    and #$80    ; check A button pressed
-    beq +
-    lda #4
-    ldx #4
-    jsr playStream
-+   lda $01
-    and #$40
-    beq +
-    lda #5
-    ldx #5
-    jsr playStream
-+   lda $01
-    and #$20
-    beq +
-    lda #6
-    ldx #7
-    jsr playStream
+    bpl +
+    lda #0
+    jsr playSfx
++   asl $01
+    bpl +
+    lda #1
+    jsr playSfx
++   asl $01
+    bpl +
+    lda #2
+    jsr playSfx
++   asl $01
+    bpl +
+    lda #3
+    jsr playSfx
 +   jmp @loop
    
 waitForVblank:
@@ -110,15 +105,40 @@ readJoypad:
     sta joypadInv
     rts
     
-playStream:
+playSfx:
+    tay
+    ldx sfxStreams.w, y
     asl
     tay
-    lda streamsTable.w, y
+    lda sfxTable.w, y
     sta nesmus.notePtrL.w, x
-    lda streamsTable+1.w, y
+    lda sfxTable+1.w, y
     sta nesmus.notePtrH.w, x
     jsr nesmus.stopStream
     jmp nesmus.startStream
+    
+playMusic:
+    asl
+    sta $F0
+    tay
+    ldx #3
+@loop
+    lda musicTablesL.w, x
+    sta $FE
+    lda musicTablesH.w, x
+    sta $FF
+    ldy $F0
+    lda ($FE), y
+    sta nesmus.notePtrL.w, x
+    iny
+    lda ($FE), y
+    sta nesmus.notePtrH.w, x
+    jsr nesmus.stopStream
+    jsr nesmus.startStream
+    dex
+    bpl @loop
+    rts
+    
     
 nmi:
     inc nmicounter
@@ -127,9 +147,9 @@ nmi:
     pha
     tya
     pha
-    lda #0
+    lda #0                  ; disable further NMIs
     sta $2000
-    jsr nesmus.updateEngine
+    jsr nesmus.updateEngine ; update sound
     pla
     tay
     pla
@@ -137,6 +157,31 @@ nmi:
     pla
     rti
 
+musicTablesL:
+    .db <musicTable0
+    .db <musicTable1
+    .db <musicTable2
+    .db <musicTable3
+musicTablesH:
+    .db >musicTable0
+    .db >musicTable1
+    .db >musicTable2
+    .db >musicTable3
+    
+sfxTable:
+    .dw sfx0, sfx1, sfx2, sfx3
+    
+sfxStreams: .db 4, 5, 7, 4
+    
+musicTable0:
+    .dw music.0.pulse1
+musicTable1:
+    .dw music.0.pulse2
+musicTable2:
+    .dw music.0.triangle
+musicTable3:
+    .dw music.0.noise
+    
 nesmus.envelopeTable:
     .dw envelope.0
     .dw envelope.1
@@ -154,6 +199,7 @@ envelope.4: .db $48,$48,$46,$45,$44,$FF,$41,$FF
 envelope.5: .db $89,$86,$85,$83,$82,$81,$FF
 envelope.6: .db $49,$48,$47,$46,$46,$45,$45,$43,$FF,$41,$FF
 
+
 nesmus.envReleaseOffsTable:  
     .db $01, $01, $01, $01, $06, $05, $09
 
@@ -161,15 +207,6 @@ nesmus.drumTable:
     .dw drum.0
     .dw drum.1
     .dw drum.2
-    
-streamsTable:
-    .dw music.0.pulse1
-    .dw music.0.pulse2
-    .dw music.0.triangle
-    .dw music.0.drum
-    .dw sfx0
-    .dw sfx1
-    .dw sfx2
     
     
 drum.0:
@@ -202,18 +239,19 @@ music.0.triangle:
     .db $F2, $04, $1e, $58, $1e, $52, $1e, $52, $F3
     .db $F7
     .dw @r
-music.0.drum:
+music.0.noise:
     .db $C6, $81, 
 @r  .db $F2, $10, $02, $51, $01, $01, $00, $51, $01, $01, $F3
     .db $F7
     .dw @r
 sfx0:
     .db $E2, $82, $25, $E1, $28, $2C, $30, $40, $84, $20, $25, $28, $30, $FF
-    ; $E2, $FD, $CA, $14, $78, $FF ;
 sfx1:
     .db $E1, $8F, $14, $A7, $7C, $AF, $86, $15, $85, $16, $17, $18, $FF
 sfx2:
     .db $87, $AB, $02, $85, $0A, $07, $05, $03, $02, $FF
+sfx3:
+    .db $E2, $FD, $CA, $14, $78, $FF ; this one uses hardware sweep which is currently buggy
     
 .orga $FFFA
 .section "vectors" size 6 force

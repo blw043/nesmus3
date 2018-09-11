@@ -40,6 +40,9 @@ startNote:
     and #$FC
     ora #$02
     sta nesmus.streamFlags, x
+    lda newNoteFlags
+    ora streamBits.w, x
+    sta newNoteFlags
     lda envVarsTable.w, x
     lsr
     bcs +
@@ -131,34 +134,44 @@ playNote:
     lda tmpvar
     sta nesmus.curNote, x
     
-    ; for noise music (drum) channel, use note number as envelope
-    cpx #3      
-    bne +
-    sta nesmus.drumId
-    jmp ++
-    
     ; for sfx noise, just use note as is 
-+   cpx #7
-    bcs ++
+    cpx #7
+    bcs @useNote
     
+    cpx #3      
+    beq @useDrum
+    bcc @getPeriod  ; streams 0-2: use stream number as is
+    dex             ; streams 4-6: decrement to get pitch var offset
     ; streams with pitch
     ; load X with offset for this stream's pitch variables
-+   cpx #4
-    bcc @getPeriod
-    dex
-    ; lookup note period from table
 @getPeriod
+    lda #$7F                    ; sign extend detune from 8 to 16 bits
+    cmp nesmus.noteDetune, x    ; (carry is set if <= $7F)
+    adc #$80
+    pha
+    
+    ; lookup 11-bit note period from table
     sty tmpvar+1 ; save y
     ldy tmpvar
+    
     lda periodTableL.w, y
+    clc
+    adc nesmus.noteDetune, x
     sta nesmus.periodL, x
-    lda periodTableH.w, y
+    pla
+    adc periodTableH.w, y
     sta nesmus.periodH, x
+    
     ldy tmpvar+1 ;restore y
-    ldx curStream
+    
++   ldx curStream
     ; set note state
-++  jsr startNote
+@useNote
+    jsr startNote
     jmp commitNotePtr
+@useDrum
+    sta nesmus.drumId ; use note number as drum envelope id
+    beq @useNote    ; BRA
     
 cutRest:
     jsr cutNote

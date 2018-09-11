@@ -1,14 +1,14 @@
-.define curStream   $F0
-.define curChannel  $F1
-.define outputOffs  $F2
-.define envX        $F3
-.define pitchX      $F4
-.define sweepX      $F5
-.define outputMask  $F6
-.define effectMask  $F7
-.define tmpvar      $F8
-.define jumpPtr     $FC
-.define dataPtr     $FE
+.define curStream    $F0
+.define curChannel   $F1
+.define outputOffs   $F2
+.define envX         $F3
+.define pitchX       $F4
+.define sweepX       $F5
+.define outputMask   $F6
+.define effectMask   $F7
+.define tmpvar       $F8
+.define newNoteFlags $FC
+.define dataPtr      $FE
 
 .define NOTE_STATE      %00000011
 .define NOTE_OFF        %00000000
@@ -71,7 +71,6 @@
     
     ; the following only apply to the pulse channels (streams 0,1,4,5)
     nesmus.pulseSweep       ds 4    ; hardware sweep registers ($4001, $4005)
-    nesmus.prevPeriodL      ds 2    
     nesmus.prevPeriodH      ds 2    ; previous output to $4003 and $4007
     nesmus.prevPulseSweep   ds 2    ; previous output to sweep unit
     

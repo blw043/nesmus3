@@ -1,4 +1,4 @@
-
+streamBits: .db $1, $2, $4, $8, $10, $20, $40, $80
 ; loads X with the index of current stream's envelope vars.
 ; carry clear if stream has envelope, set otherwise
 envVarsTable:   .db %000, %0010, %001, %100, %001, %001, %001, %001
@@ -47,11 +47,19 @@ stopStream:
     sta nesmus.noteVolume, x
     lda sweepVarsTable.w, x
     lsr
-    bcs +
+    bcs @resetDetune
     tay
     lda #$0F
     sta nesmus.pulseSweep, y
-+   rts
+@resetDetune
+    lda pitchVarsTable.w, x
+    lsr
+    bcs @done
+    tay
+    lda #0
+    sta nesmus.noteDetune, y
+@done
+    rts
     
 setEnvelope:
     sta tmpvar
@@ -87,6 +95,8 @@ pauseStream:
     
 initEngine:
 ; initialize PSG registers
+    lda #$40 
+    sta $4017
     ldx #$03   
 -   lda initialOutput.w, x
     sta $4000, x
@@ -99,10 +109,8 @@ initEngine:
     sta $4015
     sta nesmus.prevPulseSweep
     sta nesmus.prevPulseSweep+1
-    ldx #6
--   sta nesmus.prevPeriodL,x
-    dex
-    bne -
+    sta nesmus.prevPeriodH
+    sta nesmus.prevPeriodH+1
 ; initialize streams
     ldx #7
 -   stx curStream
@@ -120,6 +128,7 @@ updateEngine:
     ldx #7
     lda #0
     sta outputMask
+    sta newNoteFlags
 -   stx curStream             ; get channel & output offset
     txa
     and #3

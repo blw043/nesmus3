@@ -24,8 +24,6 @@ Sound effects do not support envelopes; instead volume and duty should be given 
 
 Software vibrato and sweeps are supported on the pulse and triangle channels.
 
-Hardware sweep support for the pulse channels is stably implemented but currently broken.
-
 All noise pitches are "inverted" before output, so that $-0 is the lowest-pitched noise and $-F is the highest.
 
 ## Data formats
@@ -89,7 +87,3 @@ To assemble NESMUS3 as a WLA DX library file use the command
 A program using NESMUS3 must supply the labels `nesmus.envelopeTable`, `nesmus.envReleaseOffsTable`, `nesmus.drumTable`. These are used as lookup tables by the envelope system.
 
 The file `demo.65s` contains a simple host program demonstrating select features of NESMUS3.
-
-## Known current issues
-
-The hardware sweep command, $FD, is broken. 
