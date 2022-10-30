@@ -24,7 +24,7 @@ Sound effects do not support envelopes; instead volume and duty should be given 
 
 Software vibrato and sweeps are supported on the pulse and triangle channels.
 
-All noise pitches are "inverted" before output, so that $-0 is the lowest-pitched noise and $-F is the highest.
+All noise pitches are "inverted" before output, so that `$-0` is the lowest-pitched noise and `$-F` is the highest.
 
 ## Data formats
 
